@@ -14,6 +14,7 @@ from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, Backup
 from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
 from src.utils.path_expander import expand
+from src.utils.time_util import utc_to_local
 
 
 class HomeTab(QWidget):
@@ -223,7 +224,7 @@ class HomeTab(QWidget):
                         )
             row = self.session_table.rowCount()
             self.session_table.insertRow(row)
-            self.session_table.setItem(row, 0, QTableWidgetItem(sess.timestamp.replace("T", " ")[:19]))
+            self.session_table.setItem(row, 0, QTableWidgetItem(utc_to_local(sess.timestamp)))
             self.session_table.setItem(row, 1, QTableWidgetItem(sess.note[:40] if sess.note else ""))
             self.session_table.setItem(row, 2, QTableWidgetItem(str(sess.total_count)))
             self.session_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, sess.session_id)
