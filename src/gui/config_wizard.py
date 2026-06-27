@@ -197,7 +197,7 @@ class ConfigWizard(QWidget):
     def _browse_file(self):
         f = QFileDialog.getOpenFileName(self, "选择配置文件")
         if f and f[0]:
-            self.wiz_paths_list.addItem(f[0])
+            self.wiz_paths_list.addItem(str(Path(f[0])))
 
     def _del_path(self):
         row = self.wiz_paths_list.currentRow()
@@ -275,7 +275,8 @@ class ConfigWizard(QWidget):
     def _update_step(self, idx: int):
         for i, btn in enumerate(self._step_btns):
             text = btn.text().strip()
-            btn.setText(f"  {'●' if i == idx else '○'} {text[2:]}")
+            label = " ".join(text.split()[1:])
+            btn.setText(f"  {'●' if i == idx else '○'} {label}")
         self._stack.setCurrentIndex(idx)
         self.prev_btn.setEnabled(idx > 0)
         self.next_btn.setVisible(idx < 3)
