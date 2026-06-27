@@ -1,0 +1,17 @@
+{
+  "name": "Everything",
+  "description": "Everything 文件搜索工具配置",
+  "version": 1,
+  "enabled": true,
+  "platform": "windows",
+  "paths": [
+    "%APPDATA%\\Everything\\Everything.ini",
+    "%APPDATA%\\Everything\\Run History.csv"
+  ],
+  "parser_fields": {},
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": []
+  }
+}
