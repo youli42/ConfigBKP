@@ -275,7 +275,7 @@ class ConfigWizard(QWidget):
     def _update_step(self, idx: int):
         for i, btn in enumerate(self._step_btns):
             text = btn.text().strip()
-            label = " ".join(text.split()[1:])
+            label = text.lstrip("○● ").strip()
             btn.setText(f"  {'●' if i == idx else '○'} {label}")
         self._stack.setCurrentIndex(idx)
         self.prev_btn.setEnabled(idx > 0)
