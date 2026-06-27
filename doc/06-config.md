@@ -1,4 +1,4 @@
-# 06-config — 配置文件格式说明
+# 06-config — 配置文件格式说明与书写指南
 
 > 本文档面向编写配置规则的用户，非开发者。
 > 解析实现细节请参阅 `02-core.md` → `config_parser.py` 章节。
@@ -44,35 +44,181 @@
 
 当前实现仅支持 JSON 格式的源文件。对于 INI 等非 JSON 格式，该字段在备份摘要中不会输出任何内容。
 
-## 示例
+---
+
+# 配置文件书写指南
+
+## 核心思想
+
+一个配置规则 = 告诉程序"要备份哪些文件" + "备份时提取哪些关键值作为摘要"。
+
+## 步骤 1：找到程序的配置文件在哪
+
+Windows 程序配置文件通常存放在以下几个位置：
+
+| 环境变量 | 典型展开路径 | 常见用途 |
+|----------|-------------|----------|
+| `%APPDATA%` | `C:\Users\用户名\AppData\Roaming` | 程序设置、用户数据 |
+| `%LOCALAPPDATA%` | `C:\Users\用户名\AppData\Local` | 缓存、本地数据 |
+| `%USERPROFILE%` | `C:\Users\用户名` | `.gitconfig`、`.ssh\` 等用户根目录文件 |
+| `%ProgramFiles%` | `C:\Program Files` | 程序安装目录（配置通常不在其中） |
+| `%ProgramW6432%` | `C:\Program Files` | 64 位程序安装目录 |
+
+**如何确定**：在资源管理器地址栏输入上述路径，按软件名称查找。或查看该软件的"设置 → 配置文件位置"说明。
+
+## 步骤 2：确定 paths 列表
+
+用一个具体例子说明——假设你想备份 **AutoHotkey** 的配置：
+
+1. 已知 AutoHotkey 的配置文件在 `%APPDATA%\AutoHotkey\` 目录下
+2. 打开终端运行 `echo %APPDATA%`，确认展开为 `C:\Users\你的用户名\AppData\Roaming`
+3. 导航到此目录，找到 `AutoHotkey\AutoHotkey.ini`
+4. 在 `paths` 中写入：
+
+```jsonc
+"paths": [
+  "%APPDATA%\\AutoHotkey\\AutoHotkey.ini"
+]
+```
+
+**路径书写规则：**
+- 使用 `\\`（双反斜杠）作为路径分隔符（JSON 语法要求反斜杠转义）
+- 使用 `%xxx%` 环境变量代替绝对路径，确保不同用户名下都能工作
+- 目录路径支持，程序会递归遍历（如 `%APPDATA%\\Code\\User\\snippets\\`）
+
+## 步骤 3：检查路径是否有效
+
+编写完规则后，在 GUI 中点击「扫描本机已装软件」按钮。程序会按 `paths` 中的路径逐一检查文件是否存在。存在则自动勾选，不存在则跳过。
+
+你也可以直接在终端验证：
+```powershell
+# 展开环境变量
+$env:APPDATA\AutoHotkey\AutoHotkey.ini
+# 确认文件存在
+Test-Path "$env:APPDATA\AutoHotkey\AutoHotkey.ini"
+```
+
+## 步骤 4：添加 parser_fields（提取关键配置值）
+
+如果备份的配置是 JSON 格式，可以配置 `parser_fields` 让程序自动读取文件内容中的关键值，在备份历史中一目了然。
+
+**操作步骤：**
+1. 打开该软件的 JSON 配置文件，找出你想展示的字段路径
+
+   例如 `settings.json` 中包含：
+   ```json
+   {
+     "editor": {
+       "fontSize": 14,
+       "fontFamily": "Cascadia Code"
+     }
+   }
+   ```
+
+2. 用点号写出从根到目标字段的路径：
+   - `"editor.fontSize"` → 取到 `14`
+   - `"editor.fontFamily"` → 取到 `"Cascadia Code"`
+
+3. 在规则中配置显示标签：
+   ```jsonc
+   "parser_fields": {
+     "editor.fontSize": "字号",
+     "editor.fontFamily": "字体"
+   }
+   ```
+
+4. 备份后，历史记录中会显示：
+   ```
+   ├─ 字号: 14
+   ├─ 字体: Cascadia Code
+   ```
+
+**注意事项：**
+- 仅支持 JSON 格式的配置文件。INI、YAML、XML 等格式不支持字段提取，parser_fields 留空即可。
+- 字段路径中不要编入数组索引（当前不支持 `items[0].name` 这种格式）。
+
+## 步骤 5：选择备份策略
+
+```jsonc
+"strategy": {
+  "type": "incremental",     // incremental = 只备份变化文件；full = 每次全部备份
+  "max_versions": 10         // 保留最近 10 个版本，超出自动删除最旧版本
+}
+```
+
+- **incremental**：推荐。首次全量，后续只备份 SHA256 变化的文件。
+- **full**：每次全量备份。占用空间大，适合小文件配置。
+- **max_versions**：设 0 表示永不清除（当前代码最小值为 1）。
+
+## 完整示例：从头编写一条规则
+
+假设要备份 **Cmder**（Windows 终端模拟器）的配置：
+
+### ① 查找文件
+
+Cmder 的配置文件通常位于 `%CMDER_ROOT%\config\`，但更常见的用户配置在 `%USERPROFILE%\cmder\config\` 或 `%APPDATA%\Cmder\`。
+
+实际操作中查到：Cmder 把 `ConEmu.xml` 存放在安装目录下的 `vendor\conemu-maximus5\` 中，但便携版直接放在 Cmder 根目录。最稳妥的方式是备份用户目录下的设置。
+
+### ② 编写规则
+
+创建 `config/user/cmder.jsonc`：
 
 ```jsonc
 {
-  "name": "VS Code",
-  "description": "Visual Studio Code 编辑器配置",
+  "name": "Cmder",
+  "description": "Cmder 终端模拟器配置",
   "version": 1,
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%APPDATA%\\Code\\User\\settings.json",
-    "%APPDATA%\\Code\\User\\keybindings.json",
-    "%APPDATA%\\Code\\User\\snippets\\",
-    "%APPDATA%\\Code\\User\\extensions.json"
-  ],
-  "parser_fields": {
-    "extensions.theme": "主题",
-    "editor.fontSize": "字号",
-    "editor.fontFamily": "字体",
-    "files.autoSave": "自动保存",
-    "workbench.colorTheme": "颜色主题"
-  },
-  "strategy": {
-    "type": "incremental",
-    "max_versions": 10,
-    "ignore_patterns": ["*.log", "*.tmp"]
-  }
+    "%CMDER_ROOT%\\config\\user-aliases.cmd",
+    "%CMDER_ROOT%\\config\\user-profile.cmd"
+  ]
 }
 ```
+
+> 注意：`%CMDER_ROOT%` 不是 Windows 系统默认环境变量，由 Cmder 启动时临时设置。如果该变量在 GUI 运行时不存在，`expand()` 会将其替换为空字符串，导致路径检查失败。
+>
+> **解决方法**：改用不依赖该变量的路径，或用 `%USERPROFILE%` 中的副本。
+
+### ③ 测试
+
+在 GUI 中点击「扫描本机已装软件」，看 Cmder 是否被自动勾选。如果未勾选，检查路径是否写对、环境变量是否可用。
+
+### ④ 优化：添加 parser_fields
+
+如果 Cmder 使用 JSON 格式的配置文件（新版本），可以添加：
+
+```jsonc
+"parser_fields": {
+  "settings.general.font": "字体",
+  "settings.general.fontSize": "字号",
+  "settings.general.colorScheme": "配色"
+}
+```
+
+## 常见问题
+
+### Q：路径中用 `%APPDATA%` 还是 `C:\Users\xxx\AppData\Roaming`？
+
+**必须用 `%APPDATA%`**。绝对路径绑定到特定用户名，换一台电脑或换用户后路径失效。
+
+### Q：一个软件有多个配置文件，需要拆成多个规则吗？
+
+不需要。一个规则可以包含多个 `paths`，它们会被打包到同一个备份版本中。
+
+### Q：为什么扫描后我的规则没有自动勾选？
+
+可能原因：
+1. `paths` 中的所有路径都不存在（用 `Test-Path` 逐个确认）
+2. `enabled` 设置为 `false`
+3. `platform` 与当前系统不匹配
+4. JSONC 语法错误（用 GUI 编辑器验证，语法正确会显示绿色✔）
+
+### Q：某软件的配置文件在 `%ProgramFiles%` 下，但我没有管理员权限怎么办？
+
+备份需要管理员权限才能读取 `%ProgramFiles%` 下的文件。程序启动时会自动请求 UAC 提权，点「是」即可。
 
 ## 内置规则清单
 
