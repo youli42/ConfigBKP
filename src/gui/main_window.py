@@ -1,13 +1,9 @@
-from pathlib import Path
-from PySide6.QtWidgets import QMainWindow, QTabWidget, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QTabWidget
 from src.gui.home_tab import HomeTab
 from src.gui.config_tab import ConfigTab
 from src.gui.settings_tab import SettingsTab
 from src.storage.local import LocalStorage
-
-
-CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "builtin"
-USER_CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "user"
+from src.utils.app_path import get_config_dir, get_default_backup_dir
 
 
 class MainWindow(QMainWindow):
@@ -16,13 +12,17 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("WinConfigBKP - Windows 配置文件备份工具")
         self.setMinimumSize(900, 650)
 
-        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        config_dir = get_config_dir()
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "user").mkdir(parents=True, exist_ok=True)
 
-        self.storage = LocalStorage(Path.home() / "WinConfigBKP_backups")
+        backup_dir = get_default_backup_dir()
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        self.storage = LocalStorage(backup_dir)
 
         self.tabs = QTabWidget()
-        self.home_tab = HomeTab(CONFIG_DIR, USER_CONFIG_DIR, self.storage)
-        self.config_tab = ConfigTab(CONFIG_DIR, USER_CONFIG_DIR)
+        self.home_tab = HomeTab(config_dir, self.storage)
+        self.config_tab = ConfigTab(config_dir)
         self.settings_tab = SettingsTab(self.storage)
 
         self.tabs.addTab(self.home_tab, "备份/恢复")

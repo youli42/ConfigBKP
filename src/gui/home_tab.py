@@ -17,10 +17,9 @@ from src.utils.path_expander import expand
 
 
 class HomeTab(QWidget):
-    def __init__(self, config_dir: Path, user_config_dir: Path, storage: StorageBackend):
+    def __init__(self, config_dir: Path, storage: StorageBackend):
         super().__init__()
         self.config_dir = config_dir
-        self.user_config_dir = user_config_dir
         self.storage = storage
         self.threadpool = QThreadPool()
         self._configs: dict[str, dict] = {}
@@ -128,10 +127,11 @@ class HomeTab(QWidget):
             child.deleteLater()
         self._checkboxes.clear()
 
-        for cfg_dir in [self.config_dir, self.user_config_dir]:
-            if not cfg_dir.exists():
+        for sub in ["builtin", "user"]:
+            sub_dir = self.config_dir / sub
+            if not sub_dir.exists():
                 continue
-            for fpath in sorted(cfg_dir.glob("*.jsonc")):
+            for fpath in sorted(sub_dir.glob("*.jsonc")):
                 try:
                     cfg = load_config(fpath)
                 except Exception:
@@ -168,7 +168,7 @@ class HomeTab(QWidget):
 
     def _scan(self):
         from src.core.scanner import scan_installed
-        matched = scan_installed([self.config_dir, self.user_config_dir])
+        matched = scan_installed([self.config_dir / "builtin", self.config_dir / "user"])
         for name, cb in self._checkboxes.items():
             cb.setChecked(name in matched)
         self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
