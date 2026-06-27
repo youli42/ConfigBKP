@@ -1,0 +1,115 @@
+# 02-core — 核心逻辑层
+
+## config_parser.py
+
+文件职责：解析 `.jsonc` 格式的配置规则文件；按点号路径从 JSON 内容中提取关键字段值；按运行平台过滤规则列表。
+
+### 公开接口
+
+| 函数/方法 | 参数 | 返回值 | 核心作用 | 副作用/异常 |
+|-----------|------|--------|----------|-------------|
+| `load_config(filepath)` | `filepath: Path` | `dict[str, Any]` | 读取并解析一个 `.jsonc` 文件为字典 | `json5.load` 抛出异常时向上传播 |
+| `get_field(data, dotted_path)` | `data: dict[str, Any]`, `dotted_path: str` | `Any | None` | 用 `reduce` 按点号分层取值 | `KeyError/TypeError/IndexError` 时返回 `None` |
+| `generate_description(name, config, source_files)` | `name: str`, `config: dict`, `source_files: dict[str, Path]` | `str` | 从 `parser_fields` 配置中提取文件内容中的字段值，拼接为摘要字符串 | 文件读取或 JSON 解析失败时跳过该文件 |
+| `filter_by_platform(rules)` | `rules: list[dict]` | `list[dict]` | 剔除 `platform` 与当前系统不匹配的规则 | `platform.system().lower()` 返回值：windows / linux / darwin |
+
+### 特别说明
+
+- 常量 `_OVERRIDE_KEY = "$schema"` 已定义但当前代码中未使用。
+- `generate_description` 对非 JSON 格式的源文件（如 INI）会静默跳过。
+
+---
+
+## backup_engine.py
+
+文件职责：定义异步备份任务 `BackupWorker`（QRunnable）及其通信信号 `BackupSignals`。在后台线程中计算文件哈希、调用 ManifestManager 增量判定、调用 StorageBackend 写入备份、清理过期版本。
+
+### 公开接口
+
+#### BackupSignals (QObject)
+
+| 信号 | 参数 | 发射时机 |
+|------|------|----------|
+| `progress` | `int` | 备份进度百分比（10/30/60/100） |
+| `message` | `str` | 当前步骤文字描述 |
+| `done` | `object` (BackupResult) | 备份完成时 |
+| `error` | `str` | 备份过程抛出异常时 |
+
+#### BackupWorker (QRunnable)
+
+| 方法 | 参数 | 返回值 | 核心作用 |
+|------|------|--------|----------|
+| `__init__` | `config: dict`, `files: dict[str, Path]`, `storage: StorageBackend`, `manifest_dir: Path`, `note: str`, `signals: BackupSignals` | — | 初始化备份任务参数 |
+| `run()` | 无 | `None` | 执行全流程：哈希 → 增量对比 → 生成描述 → 存储 → 更新 manifest → 裁剪旧版本 |
+
+### 特别说明
+
+- ⚠️ **QThread 后台线程**：`run()` 在 QThreadPool 管理的线程中执行，通过 Signals 回传结果到 GUI 线程。
+- `_prune_versions` 在每次备份后调用，超出 `max_versions` 的最旧版本被删除。
+- 当 `compute_changes` 返回空列表时，会向 GUI 发送 `files_count=0` 的 BackupResult，不执行实际写入。
+
+---
+
+## restore_engine.py
+
+文件职责：定义异步恢复任务 `RestoreWorker`（QRunnable）及其通信信号 `RestoreSignals`。从备份存储中读取文件，检测目标路径是否被占用，执行恢复或报告阻塞。
+
+### 公开接口
+
+#### RestoreSignals (QObject)
+
+| 信号 | 参数 | 发射时机 |
+|------|------|----------|
+| `progress` | `int` | 恢复进度百分比 |
+| `message` | `str` | 当前步骤文字描述 |
+| `done` | `object` (RestoreResult) | 恢复完成时 |
+| `error` | `str` | 恢复过程抛出异常或备份未找到时 |
+| `file_blocked` | `str, list` | 发现被锁文件时，消息 + 推测的进程名列表 |
+
+#### RestoreWorker (QRunnable)
+
+| 方法 | 参数 | 返回值 | 核心作用 |
+|------|------|--------|----------|
+| `__init__` | `config: dict`, `storage: StorageBackend`, `backup_id: str`, `restore_dir: Optional[Path]`, `signals: RestoreSignals` | — | 初始化恢复任务参数 |
+| `run()` | 无 | `None` | 获取备份文件 → 映射目标路径 → 检测占用 → 备份当前文件 → 复制恢复 |
+
+### 特别说明
+
+- ⚠️ **QThread 后台线程**：同 backup_engine，通过 Signals 回传。
+- 恢复前在当前目录创建 `restore_undo_<timestamp>/` 文件夹，备份当前目标文件。
+- 映射目标路径时：若 `restore_dir` 不为 None，则恢复至该目录下；否则用配置中的源路径（通过 `path_expander.expand` 展开）。
+- 文件锁检测使用 `try: open(file, "ab")`，不是 `NtCreateFile`。
+
+---
+
+## manifest_manager.py
+
+文件职责：在存储目录中维护 `manifest.json`，记录每次备份时每个文件的 SHA256、文件大小、修改时间。`compute_changes` 将当前文件与 manifest 对比，返回变化与不变的文件列表。
+
+### 公开接口
+
+| 类/方法 | 参数 | 返回值 | 核心作用 | 副作用/异常 |
+|---------|------|--------|----------|-------------|
+| `ManifestManager.__init__` | `storage_dir: Path` | — | 设置 manifest 路径为 `storage_dir / "manifest.json"` | — |
+| `load()` | 无 | `dict` | 读取 manifest.json，文件不存在时返回 `{"last_backup": None, "files": {}}` | — |
+| `save(manifest)` | `manifest: dict` | `None` | 写入当前时间到 `last_backup` 后写回磁盘 | 自动创建父目录 |
+| `compute_changes(files)` | `files: dict[str, Path]` | `tuple[list[Path], list[Path]]` | 对比 SHA256，返回（变化文件列表，不变文件列表） | 新文件或无记录的文件视为变化 |
+| `update_manifest(files, backup_id)` | `files: dict[str, Path]`, `backup_id: str` | `None` | 将文件的当前 SHA256/大小/mtime 写入 manifest，标记所属 backup_id | — |
+| `get_backup_ids()` | 无 | `set[str]` | 遍历 manifest 中所有文件的 backup_id，返回去重集合 | — |
+
+---
+
+## scanner.py
+
+文件职责：扫描本机已安装的软件，返回匹配的配置规则名称列表。
+
+### 公开接口
+
+| 函数/方法 | 参数 | 返回值 | 核心作用 | 副作用/异常 |
+|-----------|------|--------|----------|-------------|
+| `scan_installed(config_dirs)` | `config_dirs: list[Path]` | `list[str]` | 遍历规则路径是否真实存在 + 模糊匹配常见安装目录名，返回匹配的规则 name | `PermissionError` 时跳过该扫描目录 |
+
+### 特别说明
+
+- 扫描分两轮：第一轮精确匹配规则中配置的 `paths`（展开环境变量后检查 `exists()`）；第二轮模糊匹配备选目录 `_SCAN_DIRS`（`%APPDATA%` / `%LOCALAPPDATA%` / `%ProgramFiles%` / `%ProgramW6432%` / `%USERPROFILE%\.config`）下的目录名是否包含规则的 name 关键词。
+- `_load_rules`（私有函数）遍历所有 `.jsonc` 文件，过滤 `enabled=false` 的规则，按 `filter_by_platform` 筛选当前平台。

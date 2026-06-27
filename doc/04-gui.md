@@ -1,0 +1,102 @@
+# 04-gui — 界面层
+
+## main_window.py
+
+文件职责：组装 3 个 Tab（备份/恢复、规则管理、设置）到 QTabWidget 中。切换 Tab 时触发对应视图的数据刷新。
+
+### 公开接口
+
+| 类/方法 | 参数 | 返回值 | 核心作用 |
+|---------|------|--------|----------|
+| `MainWindow.__init__` | 无 | — | 创建 `config/` 和 `backups/` 目录，初始化 LocalStorage，组装 3 个 Tab |
+| `_on_tab_changed` | `index: int` | `None` | Tab 0 → 刷新配置列表；Tab 1 → 刷新规则列表 |
+
+### 特别说明
+
+- ⚠️ **Tab 切换信号（currentChanged）仅切换视图，不涉及任何备份/恢复业务逻辑。**
+- `get_config_dir()` 返回 `config/` 目录（自动创建 `user/` 子目录）。
+- `get_default_backup_dir()` 返回 `backups/` 目录。
+
+---
+
+## home_tab.py
+
+文件职责：主操作面板。左侧展示所有配置规则的勾选列表；右侧显示备注输入、备份目标选择、备份/恢复按钮、进度条；下方为历史记录表格。
+
+### 公开接口
+
+| 类/方法 | 参数 | 返回值 | 核心作用 |
+|---------|------|--------|----------|
+| `HomeTab.__init__` | `config_dir: Path`, `storage: StorageBackend` | — | 初始化界面，调用 `refresh_configs` 加载规则 |
+| `refresh_configs()` | 无 | `None` | 从 `config/builtin/` 和 `config/user/` 加载 `.jsonc` 规则并创建勾选框 |
+| `_scan()` | 无 | `None` | 调用 `scan_installed`，自动勾选匹配的规则，更新状态文本 |
+| `_select_all()` | 无 | `None` | 全选所有勾选框 |
+| `_deselect_all()` | 无 | `None` | 取消全选 |
+| `_backup()` | 无 | `None` | 获取选中配置、目标类型、目标路径，禁用按钮后启动顺序备份 |
+| `_restore()` | 无 | `None` | 获取选中配置和当前选中历史行，弹出确认框后启动异步恢复 |
+
+### 私有方法流程
+
+| 方法 | 核心逻辑 |
+|------|----------|
+| `_run_sequential_backup(configs, storage, idx)` | 对单个 config 收集文件 → 创建 BackupWorker → 启动 QThreadPool；完成后递归调用自身处理下一个 config |
+| `_backup_done(configs, storage, idx, result)` | 完成一个 config 后调用 `_run_sequential_backup(configs, storage, idx + 1)` |
+| `_backup_error(configs, storage, idx, msg)` | 弹出错误对话框后继续下一个 config |
+| `_refresh_history()` | 遍历所有已加载 config，调用 `storage.list_versions` 收集所有版本并按时间降序填入表格 |
+| `_restore_done(result)` | 恢复完成后启用按钮，弹出成功对话框 |
+| `_restore_error(msg)` | 恢复失败时启用按钮，弹出错误对话框 |
+| `_handle_blocked(msg, procs)` | 文件被占用时启用按钮，弹出提示建议关闭指定程序 |
+| `_get_selected_configs()` | 遍历勾选框返回已选中的 config 字典列表 |
+| `_browse_target()` | 弹出目录选择对话框，更新目标路径标签 |
+
+### 特别说明
+
+- ⚠️ **QThreadPool**：备份/恢复均在后台线程执行，通过 `BackupSignals` / `RestoreSignals` 回传进度和结果。
+- 备份目标支持「本地目录」和「ZIP 打包」两种，通过 `target_combo` 切换。
+- `target_path_label` 默认显示 `storage.base_dir`，可手动浏览修改。
+
+---
+
+## config_tab.py
+
+文件职责：JSONC 配置规则编辑器。下拉选择已存在的规则，在 QPlainTextEdit 中编辑源码，实时校验语法，保存到原文件。支持新建和删除规则。
+
+### 公开接口
+
+| 类/方法 | 参数 | 返回值 | 核心作用 |
+|---------|------|--------|----------|
+| `ConfigTab.__init__` | `config_dir: Path` | — | 初始化编辑器，调用 `refresh_rules` 加载规则列表 |
+| `refresh_rules()` | 无 | `None` | 遍历 `builtin/` 和 `user/` 子目录下的 `.jsonc` 文件，填入下拉框 |
+| `_save()` | 无 | `None` | 校验当前编辑器内容语法，通过后写回 `_current_file` |
+| `_validate()` | 无 | `None` | 实时用 `json5.loads` 验证编辑内容，更新验证标签文字和颜色 |
+| `_scan()` | 无 | `None` | 调用 `scan_installed`，弹出匹配结果对话框 |
+| `_new_rule()` | 无 | `None` | 写入模板到 `config/user/new_rule_N.jsonc`，自动选中 |
+| `_delete_rule()` | 无 | `None` | 弹出确认对话框，确认后 `unlink()` 删除当前规则文件 |
+| `_on_rule_selected(index)` | `index: int` | `None` | 将选中文件的文本内容加载到编辑器，设置 `_current_file` |
+
+### 特别说明
+
+- 语法正确时验证标签显示绿色 `语法正确 ✔`；错误时显示红色 `语法错误: {异常信息}`。
+- 新建规则固定写入 `user/` 子目录，内置规则（`builtin/` 下）可编辑、可删除。
+
+---
+
+## settings_tab.py
+
+文件职责：设置面板。包含定时备份（注册/卸载 Windows 计划任务）、版本策略配置、恢复设置和关于信息。
+
+### 公开接口
+
+| 类/方法 | 参数 | 返回值 | 核心作用 |
+|---------|------|--------|----------|
+| `SettingsTab.__init__` | `storage: StorageBackend` | — | 初始化 UI 组件 |
+| `_apply_scheduler()` | 无 | `None` | 开关开 → 调用 `_register_task`；关 → `_unregister_task` |
+| `_register_task()` | 无 | `None` | 调用 `schtasks.exe /Create` 注册每日执行计划任务 |
+| `_unregister_task()` | 无 | `None` | 调用 `schtasks.exe /Delete` 删除 `WinConfigBKP_DailyBackup` 任务 |
+| `_reboot_replace()` | 无 | `None` | 弹出信息提示对话框 |
+
+### 特别说明
+
+- 定时任务名称硬编码为 `WinConfigBKP_DailyBackup`。
+- `_register_task` 中脚本路径使用 `Path(__file__).resolve().parent.parent.parent / "main.py"`，打包后需调整为 exe 路径。
+- `_unregister_task` 静默忽略 `schtasks.exe` 报错（任务不存在时不会弹出错误）。

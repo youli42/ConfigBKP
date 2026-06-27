@@ -1,0 +1,58 @@
+# 05-utils — 工具层
+
+## app_path.py
+
+文件职责：根据程序运行模式（打包 exe / 源码解释器）返回对应的根目录路径，派生出 config 目录和默认备份目录。
+
+### 公开接口
+
+| 函数 | 参数 | 返回值 | 核心作用 |
+|------|------|--------|----------|
+| `get_app_root()` | 无 | `Path` | 打包时返回 `sys.executable.parent`；源码时返回项目根目录（`__file__` 上溯 3 级） |
+| `get_config_dir()` | 无 | `Path` | `get_app_root() / "config"` |
+| `get_default_backup_dir()` | 无 | `Path` | `get_app_root() / "backups"` |
+
+---
+
+## path_expander.py
+
+文件职责：将包含 `%xxx%` 环境变量占位符的路径字符串展开为 `pathlib.Path` 绝对路径。
+
+### 公开接口
+
+| 函数 | 参数 | 返回值 | 核心作用 | 副作用/异常 |
+|------|------|--------|----------|-------------|
+| `expand(path_str)` | `path_str: str` | `Path` | 用 `re.sub` 替换 `%NAME%` 为 `os.environ[NAME]`，然后 `Path.resolve()` | 环境变量不存在时替换为空字符串 |
+
+---
+
+## file_hasher.py
+
+文件职责：计算文件的 SHA256 哈希值，返回文件元信息字典。
+
+### 公开接口
+
+| 函数 | 参数 | 返回值 | 核心作用 |
+|------|------|--------|----------|
+| `sha256(filepath)` | `filepath: Path` | `str` | 以 64KB 分块读取文件，返回 64 字符的十六进制 SHA256 |
+| `file_info(filepath)` | `filepath: Path` | `dict` | 返回 `{"sha256": ..., "size": ..., "mtime": ...}` |
+
+---
+
+## file_locker.py
+
+文件职责：检测文件是否被其他进程锁定；调用 Windows API `MoveFileExW` 注册重启时文件替换；通过路径关键词推测占用进程名。
+
+### 公开接口
+
+| 函数 | 参数 | 返回值 | 核心作用 | 副作用/异常 |
+|------|------|--------|----------|-------------|
+| `is_file_locked(filepath)` | `filepath: Path` | `bool` | 尝试以追加二进制模式打开文件，失败则文件被锁定 | `PermissionError` / `OSError` 返回 `True` |
+| `schedule_reboot_replace(src, dst)` | `src: Path`, `dst: Path` | `bool` | 调用 `kernel32.MoveFileExW` 标记重启时替换 | 需管理员权限，`bool` 表示 API 调用是否成功 |
+| `get_locked_processes(filepath)` | `filepath: Path` | `list[str]` | 根据路径中的关键词（`Code\User\settings.json` 等）返回推测的进程名 | 基于硬编码字典匹配，非系统级查询 |
+
+### 特别说明
+
+- ⚠️ **MoveFileExW**：Windows 系统调用，标记文件在下次重启前完成替换。需要 `SeBackupPrivilege` / `SeRestorePrivilege` 权限。
+- ⚠️ **`get_locked_processes`** 返回值是对锁定进程的推测，并非真实进程查询。已知规则：`Code.exe`（VS Code 设置/快捷键文件）、`WindowsTerminal.exe`、`powershell.exe`。
+- `MOVEFILE_REPLACE_EXISTING = 1`，`MOVEFILE_DELAY_UNTIL_REBOOT = 4`，二者取或。
