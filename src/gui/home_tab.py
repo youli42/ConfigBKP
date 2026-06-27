@@ -228,10 +228,6 @@ class HomeTab(QWidget):
                             if f.is_file():
                                 rel = str(f.relative_to(expanded.parent))
                                 files[rel] = f
-                else:
-                    expanded_path = str(expanded)
-                    if expanded_path not in str(files):
-                        pass
             items.append((cfg, files))
 
         skipped = [cfg["name"] for cfg, files in items if not files]

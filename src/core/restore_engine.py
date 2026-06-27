@@ -1,4 +1,5 @@
 import shutil
+import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
@@ -7,6 +8,9 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 
 from src.storage.base import StorageBackend, RestoreResult
 from src.utils.file_locker import is_file_locked, schedule_reboot_replace, get_locked_processes
+
+
+logger = logging.getLogger(__name__)
 
 
 class RestoreSignals(QObject):
@@ -36,8 +40,11 @@ class RestoreWorker(QRunnable):
 
             backup_files = self.storage.get_files(config_name, self.backup_id)
             if not backup_files:
+                logger.debug("[%s] 备份未找到: %s", config_name, self.backup_id)
                 self.signals.error.emit(f"未找到备份: {self.backup_id}")
                 return
+
+            logger.debug("[%s] 从备份 %s 读取到 %d 文件", config_name, self.backup_id, len(backup_files))
 
             self.signals.message.emit("正在检测文件占用...")
             self.signals.progress.emit(30)
@@ -71,6 +78,7 @@ class RestoreWorker(QRunnable):
                 procs = set()
                 for f in locked_files:
                     procs.update(get_locked_processes(f))
+                logger.debug("[%s] %d 文件被占用: %s", config_name, len(locked_files), procs)
                 self.signals.file_blocked.emit(
                     f"{len(locked_files)} 个文件被占用",
                     list(procs),
@@ -102,12 +110,15 @@ class RestoreWorker(QRunnable):
                     failed.append((dst, str(e)))
 
             if failed:
+                logger.debug("[%s] %d 文件恢复失败", config_name, len(failed))
                 self.signals.error.emit(f"部分文件恢复失败: {len(failed)} 个")
                 return
 
+            logger.debug("[%s] 恢复完成，%d 文件", config_name, len(restored))
             self.signals.progress.emit(100)
             self.signals.message.emit("恢复完成")
             self.signals.done.emit(RestoreResult(config_name, restored, []))
 
         except Exception as e:
+            logger.debug("[%s] 恢复异常: %s", self.config.get("name", "?"), e)
             self.signals.error.emit(str(e))

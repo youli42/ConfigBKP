@@ -27,3 +27,6 @@ Thumbs.db
 
 # User config
 config/user/
+
+# 程序缓存
+backups/

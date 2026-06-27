@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
@@ -8,6 +9,9 @@ from src.storage.base import StorageBackend, BackupResult
 from src.core.manifest_manager import ManifestManager
 from src.core.config_parser import generate_description
 from src.utils.path_expander import expand
+
+
+logger = logging.getLogger(__name__)
 
 
 class BackupSignals(QObject):
@@ -40,11 +44,13 @@ class BackupWorker(QRunnable):
             changed, _ = manifest_mgr.compute_changes(self.files)
 
             if not changed:
+                logger.debug("[%s] 无文件变化，跳过备份", config_name)
                 self.signals.message.emit("无文件变化，跳过备份")
                 self.signals.progress.emit(100)
                 self.signals.done.emit(BackupResult(backup_id, config_name, 0, 0, self.note))
                 return
 
+            logger.debug("[%s] %d 文件变化", config_name, len(changed))
             self.signals.message.emit(f"发现 {len(changed)} 个文件变化，正在备份...")
             self.signals.progress.emit(30)
 
@@ -78,12 +84,14 @@ class BackupWorker(QRunnable):
             self.signals.done.emit(result)
 
         except Exception as e:
+            logger.debug("[%s] 备份异常: %s", self.config.get("name", "?"), e)
             self.signals.error.emit(str(e))
 
     def _prune_versions(self, config_name: str):
         max_versions = self.config.get("strategy", {}).get("max_versions", 10)
         versions = self.storage.list_versions(config_name)
         if len(versions) > max_versions:
+            logger.debug("[%s] 裁剪旧版本: %d → %d", config_name, len(versions), max_versions)
             for old in versions[max_versions:]:
                 self.storage.delete_version(config_name, old.backup_id)
 
@@ -125,12 +133,14 @@ class BatchBackupWorker(QRunnable):
     def run(self):
         summary = BackupSummary()
         total = len(self.items)
+        logger.debug("批量备份开始，共 %d 个配置", total)
         for idx, (cfg, files) in enumerate(self.items):
             name = cfg["name"]
             self._config_index[name] = cfg
             self.signals.message.emit(f"[{idx+1}/{total}] 正在处理 {name}...")
             try:
                 if not files:
+                    logger.debug("[%s] 源文件路径不存在，跳过", name)
                     summary.skipped.append(name)
                     self.signals.message.emit(f"[{idx+1}/{total}] {name}: 无文件，已跳过")
                     self.signals.progress.emit(int((idx + 1) / total * 100))
@@ -140,11 +150,13 @@ class BatchBackupWorker(QRunnable):
                 manifest_mgr = ManifestManager(manifest_dir)
                 changed, _ = manifest_mgr.compute_changes(files)
                 if not changed:
+                    logger.debug("[%s] 文件无变化，跳过", name)
                     summary.skipped.append(name)
                     self.signals.message.emit(f"[{idx+1}/{total}] {name}: 无变化，已跳过")
                     self.signals.progress.emit(int((idx + 1) / total * 100))
                     continue
                 changed_files = {rel: fp for rel, fp in files.items() if fp in changed}
+                logger.debug("[%s] 备份 %d 文件 → %s", name, len(changed_files), backup_id)
                 description = generate_description(name, cfg, changed_files)
                 result = self.storage.save(
                     backup_id=backup_id, config_name=name,
@@ -155,9 +167,12 @@ class BatchBackupWorker(QRunnable):
                 summary.results.append(result)
                 self.signals.message.emit(f"[{idx+1}/{total}] {name}: 备份完成 ({result.files_count} 文件)")
             except Exception as e:
+                logger.debug("[%s] 备份失败: %s", name, e)
                 summary.errors.append((name, str(e)))
                 self.signals.message.emit(f"[{idx+1}/{total}] {name}: 失败 - {e}")
             self.signals.progress.emit(int((idx + 1) / total * 100))
+        logger.debug("批量备份结束: %d 成功, %d 跳过, %d 失败",
+                     len(summary.results), len(summary.skipped), len(summary.errors))
         self.signals.done.emit(summary)
 
     def _prune_versions(self, config_name: str):

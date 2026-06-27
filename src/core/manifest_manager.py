@@ -1,8 +1,12 @@
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Optional
 from src.utils.file_hasher import file_info
 from datetime import datetime, timezone
+
+
+logger = logging.getLogger(__name__)
 
 
 class ManifestManager:
@@ -30,13 +34,16 @@ class ManifestManager:
         for rel_path, abs_path in files.items():
             prev = prev_files.get(rel_path)
             if not prev:
+                logger.debug("  新文件: %s", rel_path)
                 changed.append(abs_path)
                 continue
             current_info = file_info(abs_path)
             if current_info["sha256"] != prev.get("sha256"):
+                logger.debug("  已变更: %s", rel_path)
                 changed.append(abs_path)
             else:
                 unchanged.append(abs_path)
+        logger.debug("  增量对比: %d 变化, %d 不变", len(changed), len(unchanged))
         return changed, unchanged
 
     def update_manifest(self, files: dict[str, Path], backup_id: str):

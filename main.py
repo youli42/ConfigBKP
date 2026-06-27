@@ -1,9 +1,17 @@
 import ctypes
 import sys
 import os
+import logging
 
 from PySide6.QtWidgets import QApplication
 from src.gui.main_window import MainWindow
+
+
+logging.basicConfig(
+    level=logging.DEBUG if os.environ.get("WINCONFIGBKP_DEBUG") else logging.INFO,
+    format="[%(levelname)s] %(message)s",
+    stream=sys.stderr,
+)
 
 
 def is_admin() -> bool:

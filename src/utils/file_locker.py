@@ -1,7 +1,10 @@
+import logging
 from pathlib import Path
 import ctypes
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # MoveFileEx flags
 MOVEFILE_REPLACE_EXISTING = 1
@@ -14,6 +17,7 @@ def is_file_locked(filepath: Path) -> bool:
             pass
         return False
     except (PermissionError, OSError):
+        logger.debug("文件被占用: %s", filepath)
         return True
 
 
@@ -26,7 +30,9 @@ def schedule_reboot_replace(src: Path, dst: Path) -> bool:
         dst_str,
         MOVEFILE_REPLACE_EXISTING | MOVEFILE_DELAY_UNTIL_REBOOT,
     )
-    return result != 0
+    success = result != 0
+    logger.debug("MoveFileExW(%s → %s) = %s", src_str, dst_str, success)
+    return success
 
 
 def get_locked_processes(filepath: Path) -> list[str]:
