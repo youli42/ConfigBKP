@@ -14,7 +14,11 @@ def _read_meta(meta_path: Path) -> dict:
 
 class LocalStorage(StorageBackend):
     def __init__(self, base_dir: Path):
-        self.base_dir = base_dir
+        self._storage_base_dir = base_dir
+
+    @property
+    def base_dir(self) -> Path:
+        return self._storage_base_dir
 
     def _config_dir(self, config_name: str) -> Path:
         return self.base_dir / config_name

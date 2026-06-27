@@ -46,6 +46,9 @@ class RestoreWorker(QRunnable):
 
             logger.debug("[%s] 从备份 %s 读取到 %d 文件", config_name, self.backup_id, len(backup_files))
 
+            import tempfile
+            backup_dir = Path(tempfile.mkdtemp(prefix="restore_undo_"))
+
             self.signals.message.emit("正在检测文件占用...")
             self.signals.progress.emit(30)
 
@@ -72,6 +75,12 @@ class RestoreWorker(QRunnable):
                 dst = original_paths.get(rel_path)
                 if dst and is_file_locked(dst):
                     locked_files.append(dst)
+                if dst and self.restore_dir:
+                    resolved = dst.resolve()
+                    base = self.restore_dir.resolve()
+                    if base not in resolved.parents and resolved != base:
+                        self.signals.error.emit(f"路径越界: {rel_path}")
+                        return
                 src_files[rel_path] = (src_path, dst)
 
             if locked_files:
@@ -79,6 +88,7 @@ class RestoreWorker(QRunnable):
                 for f in locked_files:
                     procs.update(get_locked_processes(f))
                 logger.debug("[%s] %d 文件被占用: %s", config_name, len(locked_files), procs)
+                shutil.rmtree(backup_dir, ignore_errors=True)
                 self.signals.file_blocked.emit(
                     f"{len(locked_files)} 个文件被占用",
                     list(procs),
@@ -88,8 +98,6 @@ class RestoreWorker(QRunnable):
             self.signals.message.emit("恢复前正在备份当前文件...")
             self.signals.progress.emit(50)
 
-            backup_dir = Path(f"restore_undo_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}")
-            backup_dir.mkdir(exist_ok=True)
             for _, (_, dst) in src_files.items():
                 if dst and dst.exists():
                     undo_path = backup_dir / dst.name
@@ -111,9 +119,11 @@ class RestoreWorker(QRunnable):
 
             if failed:
                 logger.debug("[%s] %d 文件恢复失败", config_name, len(failed))
+                shutil.rmtree(backup_dir, ignore_errors=True)
                 self.signals.error.emit(f"部分文件恢复失败: {len(failed)} 个")
                 return
 
+            shutil.rmtree(backup_dir, ignore_errors=True)
             logger.debug("[%s] 恢复完成，%d 文件", config_name, len(restored))
             self.signals.progress.emit(100)
             self.signals.message.emit("恢复完成")

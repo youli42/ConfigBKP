@@ -27,6 +27,7 @@ class HomeTab(QWidget):
         self._checkboxes: dict[str, QCheckBox] = {}
         self._backup_signals: BatchBackupSignals | None = None
         self._restore_signals: RestoreSignals | None = None
+        self._is_backing_up = False
         self._is_restoring = False
         self._setup_ui()
 
@@ -257,10 +258,14 @@ class HomeTab(QWidget):
         return selected
 
     def _backup(self):
+        if self._is_backing_up:
+            QMessageBox.warning(self, "提示", "正在执行备份操作，请等待完成")
+            return
         configs = self._get_selected_configs()
         if not configs:
             QMessageBox.warning(self, "提示", "请先选择要备份的配置")
             return
+        self._is_backing_up = True
 
         self.backup_btn.setEnabled(False)
         self.restore_btn.setEnabled(False)
@@ -303,6 +308,7 @@ class HomeTab(QWidget):
             if reply != QMessageBox.StandardButton.Yes:
                 self.backup_btn.setEnabled(True)
                 self.restore_btn.setEnabled(True)
+                self._is_backing_up = False
                 return
 
         self._backup_signals = BatchBackupSignals()
@@ -359,6 +365,7 @@ class HomeTab(QWidget):
         self.restore_btn.setEnabled(True)
         self.progress_bar.setValue(100)
         self._backup_signals = None
+        self._is_backing_up = False
         self._refresh_sessions(storage)
         parts = []
         if summary.results:
@@ -390,6 +397,7 @@ class HomeTab(QWidget):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._backup_signals = None
+        self._is_backing_up = False
         QMessageBox.critical(self, "备份失败", msg)
 
     def _restore_single(self, config_name: str, backup_id: str):

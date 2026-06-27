@@ -45,6 +45,11 @@ class BackupSession:
 
 
 class StorageBackend(ABC):
+    @property
+    @abstractmethod
+    def base_dir(self) -> Path:
+        ...
+
     @abstractmethod
     def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
              session_id: str = "") -> BackupResult:
