@@ -1,3 +1,4 @@
+import json as _json
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -9,55 +10,23 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from src.core.config_parser import load_config
-from src.utils.path_expander import expand
-
-
-import json as _json
-
-
-def _js(v: str) -> str:
-    return _json.dumps(v, ensure_ascii=False)
-
 
 def serialize_to_jsonc(data: dict) -> str:
-    lines = ["{"]
-    lines.append(f'  "name": {_js(data.get("name", ""))},')
-    lines.append(f'  "description": {_js(data.get("description", ""))},')
-    lines.append(f'  "version": 1,')
-    lines.append(f'  "enabled": {"true" if data.get("enabled", True) else "false"},')
-    lines.append(f'  "platform": {_js(data.get("platform", "windows"))},')
-    paths = data.get("paths", [])
-    if paths:
-        lines.append('  "paths": [')
-        for p in paths:
-            lines.append(f'    {_js(p)},')
-        lines.append('  ],')
-    else:
-        lines.append('  "paths": [],')
-    fields = data.get("parser_fields", {})
-    if fields:
-        lines.append('  "parser_fields": {')
-        for k, v in fields.items():
-            lines.append(f'    {_js(k)}: {_js(v)},')
-        lines.append('  },')
-    else:
-        lines.append('  "parser_fields": {},')
-    strat = data.get("strategy", {})
-    lines.append('  "strategy": {')
-    lines.append(f'    "type": {_js(strat.get("type", "incremental"))},')
-    lines.append(f'    "max_versions": {strat.get("max_versions", 10)},')
-    ignores = strat.get("ignore_patterns", [])
-    if ignores:
-        lines.append('    "ignore_patterns": [')
-        for ig in ignores:
-            lines.append(f'      {_js(ig)},')
-        lines.append('    ],')
-    else:
-        lines.append('    "ignore_patterns": []')
-    lines.append('  }')
-    lines.append("}")
-    return "\n".join(lines)
+    obj = {
+        "name": data.get("name", ""),
+        "description": data.get("description", ""),
+        "version": 1,
+        "enabled": data.get("enabled", True),
+        "platform": data.get("platform", "windows"),
+        "paths": list(data.get("paths", [])),
+        "parser_fields": dict(data.get("parser_fields", {})),
+        "strategy": {
+            "type": data.get("strategy", {}).get("type", "incremental"),
+            "max_versions": data.get("strategy", {}).get("max_versions", 10),
+            "ignore_patterns": list(data.get("strategy", {}).get("ignore_patterns", [])),
+        },
+    }
+    return _json.dumps(obj, indent=2, ensure_ascii=False)
 
 
 def parse_to_form_data(cfg: dict) -> dict:
@@ -196,7 +165,7 @@ class ConfigWizard(QWidget):
         layout.addWidget(self.wiz_paths_list)
         btn_row = QHBoxLayout()
         self.wiz_path_add_btn = QPushButton("添加路径")
-        self.wiz_path_browse_btn = QPushButton("浏览...")
+        self.wiz_path_browse_btn = QPushButton("浏览目录...")
         self.wiz_path_del_btn = QPushButton("删除路径")
         btn_row.addWidget(self.wiz_path_add_btn)
         btn_row.addWidget(self.wiz_path_browse_btn)
@@ -215,12 +184,7 @@ class ConfigWizard(QWidget):
     def _browse_path(self):
         folder = QFileDialog.getExistingDirectory(self, "选择配置文件目录")
         if folder:
-            p = Path(folder)
-            self.wiz_paths_list.addItem(str(p))
-        else:
-            f = QFileDialog.getOpenFileName(self, "选择配置文件")
-            if f and f[0]:
-                self.wiz_paths_list.addItem(f[0])
+            self.wiz_paths_list.addItem(str(Path(folder)))
 
     def _del_path(self):
         row = self.wiz_paths_list.currentRow()

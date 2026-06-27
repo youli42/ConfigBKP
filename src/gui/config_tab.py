@@ -17,8 +17,6 @@ class ConfigTab(QWidget):
         super().__init__()
         self.config_dir = config_dir
         self._current_file: Path | None = None
-        self._wizard_dirty = False
-        self._source_dirty = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -84,7 +82,6 @@ class ConfigTab(QWidget):
         self.refresh_rules()
 
     def _on_source_changed(self):
-        self._source_dirty = True
         text = self.editor.toPlainText()
         if not text.strip():
             self.validation_label.setText("")
@@ -108,11 +105,11 @@ class ConfigTab(QWidget):
                 try:
                     cfg = json5.loads(text)
                     self.wizard.load_rule(cfg)
-                except Exception:
-                    pass
+                except Exception as e:
+                    QMessageBox.warning(self, "解析警告",
+                                        f"源码 JSONC 解析失败，向导将保持当前数据：\n{e}")
 
     def _on_wizard_finish(self, jsonc: str):
-        self._wizard_dirty = True
         text = self.editor.toPlainText()
         if text.strip():
             try:
