@@ -32,17 +32,17 @@
 | `_scan()` | 无 | `None` | 调用 `scan_installed`，自动勾选匹配的规则，更新状态文本 |
 | `_select_all()` | 无 | `None` | 全选所有勾选框 |
 | `_deselect_all()` | 无 | `None` | 取消全选 |
-| `_backup()` | 无 | `None` | 获取选中配置、目标类型、目标路径，禁用按钮后启动顺序备份 |
+| `_backup()` | 无 | `None` | 获取选中配置 → 收集文件 → 前置检查路径是否存在 → 创建 `BatchBackupWorker` 一次性处理所有配置 → 完成后弹出汇总对话框 |
 | `_restore()` | 无 | `None` | 获取选中配置和当前选中历史行，弹出确认框后启动异步恢复 |
 
 ### 私有方法流程
 
 | 方法 | 核心逻辑 |
 |------|----------|
-| `_run_sequential_backup(configs, storage, idx)` | 对单个 config 收集文件 → 创建 BackupWorker → 启动 QThreadPool；完成后递归调用自身处理下一个 config |
-| `_backup_done(configs, storage, idx, result)` | 完成一个 config 后调用 `_run_sequential_backup(configs, storage, idx + 1)` |
-| `_backup_error(configs, storage, idx, msg)` | 弹出错误对话框后继续下一个 config |
-| `_refresh_history()` | 遍历所有已加载 config，调用 `storage.list_versions` 收集所有版本并按时间降序填入表格 |
+| `_backup()` | 收集所有选中配置的文件字典；对路径全部不存在的配置弹窗告警（用户可取消）；创建 `BatchBackupWorker` 通过 QThreadPool 一次性后台处理所有配置 |
+| `_batch_backup_done(storage, summary)` | 备份全部完成后启用按钮，调用 `_refresh_history(storage)` 读取正确的存储后端，弹出成功/跳过/失败的汇总对话框 |
+| `_backup_error(msg)` | 弹出错误对话框，恢复按钮状态 |
+| `_refresh_history(storage)` | 接收可选 `storage` 参数。传参时从该 storage 读取版本；不传时从 `self.storage` 读取。遍历所有已加载 config，按时间降序填入表格 |
 | `_restore_done(result)` | 恢复完成后启用按钮，弹出成功对话框 |
 | `_restore_error(msg)` | 恢复失败时启用按钮，弹出错误对话框 |
 | `_handle_blocked(msg, procs)` | 文件被占用时启用按钮，弹出提示建议关闭指定程序 |
@@ -51,9 +51,10 @@
 
 ### 特别说明
 
-- ⚠️ **QThreadPool**：备份/恢复均在后台线程执行，通过 `BackupSignals` / `RestoreSignals` 回传进度和结果。
+- ⚠️ **QThreadPool**：备份通过 `BatchBackupWorker` 一次性在后台线程处理所有配置，避免了原信号链式调用因跨线程信号丢失导致的中断风险。恢复通过 `RestoreWorker` 单任务执行。
 - 备份目标支持「本地目录」和「ZIP 打包」两种，通过 `target_combo` 切换。
 - `target_path_label` 默认显示 `storage.base_dir`，可手动浏览修改。
+- `_refresh_history` 接收 `storage` 参数确保历史记录显示正确的存储后端内容（解决目标路径变更后历史不刷新的问题）。
 
 ---
 

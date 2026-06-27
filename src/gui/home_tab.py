@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThreadPool
 
 from src.core.config_parser import load_config, filter_by_platform, generate_description
-from src.core.backup_engine import BackupWorker, BackupSignals
+from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
 from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
 from src.utils.path_expander import expand
@@ -150,12 +150,13 @@ class HomeTab(QWidget):
         self.config_list_layout.addStretch()
         self._refresh_history()
 
-    def _refresh_history(self):
+    def _refresh_history(self, storage: Optional[StorageBackend] = None):
         self.history_table.setRowCount(0)
         seen: set[str] = set()
         all_versions: list[BackupVersion] = []
+        s = storage or self.storage
         for name in self._configs:
-            versions = self.storage.list_versions(name)
+            versions = s.list_versions(name)
             all_versions.extend(versions)
         all_versions.sort(key=lambda v: v.timestamp, reverse=True)
         for v in all_versions:
@@ -213,49 +214,84 @@ class HomeTab(QWidget):
             from src.storage.local import LocalStorage
             storage = LocalStorage(Path(target_path_str))
 
-        self._run_sequential_backup(configs, storage, 0)
+        items = []
+        note = self.note_input.toPlainText()
+        for cfg in configs:
+            files = {}
+            for p in cfg.get("paths", []):
+                expanded = expand(p)
+                if expanded.exists():
+                    if expanded.is_file():
+                        files[expanded.name] = expanded
+                    elif expanded.is_dir():
+                        for f in expanded.rglob("*"):
+                            if f.is_file():
+                                rel = str(f.relative_to(expanded.parent))
+                                files[rel] = f
+                else:
+                    expanded_path = str(expanded)
+                    if expanded_path not in str(files):
+                        pass
+            items.append((cfg, files))
 
-    def _run_sequential_backup(self, configs: list[dict], storage, idx: int):
-        if idx >= len(configs):
-            self.backup_btn.setEnabled(True)
-            self.restore_btn.setEnabled(True)
-            self.progress_bar.setValue(100)
-            self.status_label.setText("全部备份完成")
-            self._refresh_history()
-            return
+        skipped = [cfg["name"] for cfg, files in items if not files]
+        if skipped:
+            reply = QMessageBox.question(
+                self, "路径不存在",
+                f"以下配置的源文件路径不存在，将被跳过：\n" + "\n".join(f"  • {n}" for n in skipped) +
+                "\n\n是否继续备份其他配置？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.backup_btn.setEnabled(True)
+                self.restore_btn.setEnabled(True)
+                return
 
-        cfg = configs[idx]
-        name = cfg["name"]
-        files = {}
-        for p in cfg.get("paths", []):
-            expanded = expand(p)
-            if expanded.exists():
-                if expanded.is_file():
-                    files[expanded.name] = expanded
-                elif expanded.is_dir():
-                    for f in expanded.rglob("*"):
-                        if f.is_file():
-                            rel = str(f.relative_to(expanded.parent))
-                            files[rel] = f
-
-        self.status_label.setText(f"[{idx+1}/{len(configs)}] 正在备份 {name}...")
-
-        signals = BackupSignals()
+        signals = BatchBackupSignals()
         signals.progress.connect(self.progress_bar.setValue)
         signals.message.connect(self.status_label.setText)
-        signals.done.connect(lambda result: self._backup_done(configs, storage, idx, result))
-        signals.error.connect(lambda msg: self._backup_error(configs, storage, idx, msg))
+        signals.done.connect(lambda summary: self._batch_backup_done(storage, summary))
+        signals.error.connect(lambda msg: self._backup_error(msg))
 
-        manifest_dir = Path(self.target_path_label.text()) / name
-        worker = BackupWorker(cfg, files, storage, manifest_dir, self.note_input.toPlainText(), signals)
+        manifest_base_dir = Path(target_path_str)
+        worker = BatchBackupWorker(items, storage, manifest_base_dir, note, signals)
         self.threadpool.start(worker)
 
-    def _backup_done(self, configs: list[dict], storage, idx: int, result):
-        self._run_sequential_backup(configs, storage, idx + 1)
+    def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
+        self.backup_btn.setEnabled(True)
+        self.restore_btn.setEnabled(True)
+        self.progress_bar.setValue(100)
+        self._refresh_history(storage)
+        parts = []
+        if summary.results:
+            total_files = sum(r.files_count for r in summary.results)
+            parts.append(f"成功: {len(summary.results)} 个配置 ({total_files} 文件)")
+        if summary.skipped:
+            parts.append(f"跳过: {len(summary.skipped)} 个")
+        if summary.errors:
+            parts.append(f"失败: {len(summary.errors)} 个")
+        msg = " | ".join(parts) if parts else "无任何操作"
+        self.status_label.setText(f"备份完成: {msg}")
+        lines = []
+        if summary.results:
+            lines.append("已备份:")
+            for r in summary.results:
+                lines.append(f"  ✓ {r.config_name} ({r.files_count} 文件)")
+        if summary.skipped:
+            lines.append("已跳过:")
+            for name in summary.skipped:
+                lines.append(f"  - {name}")
+        if summary.errors:
+            lines.append("失败:")
+            for name, err in summary.errors:
+                lines.append(f"  ✗ {name}: {err}")
+        if lines:
+            QMessageBox.information(self, "备份结果", "\n".join(lines))
 
-    def _backup_error(self, configs: list[dict], storage, idx: int, msg: str):
+    def _backup_error(self, msg: str):
+        self.backup_btn.setEnabled(True)
+        self.restore_btn.setEnabled(True)
         QMessageBox.critical(self, "备份失败", msg)
-        self._run_sequential_backup(configs, storage, idx + 1)
 
     def _restore(self):
         configs = self._get_selected_configs()

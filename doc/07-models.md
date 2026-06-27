@@ -1,5 +1,31 @@
 # 07-models — 数据模型
 
+## 批量备份结果（src/core/backup_engine.py）
+
+### BackupSummary
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `results` | `list[BackupResult]` | 成功备份的配置结果列表 |
+| `skipped` | `list[str]` | 因无文件或无变化而跳过的配置名称 |
+| `errors` | `list[tuple[str, str]]` | 备份失败的（配置名, 错误信息）列表 |
+
+| 属性 | 返回 | 计算方式 |
+|------|------|----------|
+| `success_count` | `int` | `len(results)` |
+| `total_count` | `int` | `success_count + len(skipped) + len(errors)` |
+
+### BatchBackupSignals (QObject)
+
+| 信号 | 参数 | 发射时机 |
+|------|------|----------|
+| `progress` | `int` | 每处理完一个配置时 |
+| `message` | `str` | 当前配置的处理状态文字 |
+| `done` | `object` (BackupSummary) | 所有配置处理完毕时 |
+| `error` | `str` | 全局错误时 |
+
+---
+
 ## 存储数据类（src/storage/base.py）
 
 ### BackupResult
@@ -60,6 +86,8 @@
 ---
 
 ## StorageBackend 接口（src/storage/base.py）
+
+抽象基类，定义了 5 个抽象方法。`LocalStorage` 和 `ZipStorage` 分别实现。
 
 抽象基类，定义了 5 个抽象方法。`LocalStorage` 和 `ZipStorage` 分别实现。
 

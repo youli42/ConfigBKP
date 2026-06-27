@@ -22,7 +22,7 @@
 
 ## backup_engine.py
 
-文件职责：定义异步备份任务 `BackupWorker`（QRunnable）及其通信信号 `BackupSignals`。在后台线程中计算文件哈希、调用 ManifestManager 增量判定、调用 StorageBackend 写入备份、清理过期版本。
+文件职责：定义单配置备份任务 `BackupWorker`（QRunnable）和批量备份任务 `BatchBackupWorker`（QRunnable）及其通信信号。在后台线程中计算文件哈希、调用 ManifestManager 增量判定、调用 StorageBackend 写入备份、清理过期版本。
 
 ### 公开接口
 
@@ -39,14 +39,43 @@
 
 | 方法 | 参数 | 返回值 | 核心作用 |
 |------|------|--------|----------|
-| `__init__` | `config: dict`, `files: dict[str, Path]`, `storage: StorageBackend`, `manifest_dir: Path`, `note: str`, `signals: BackupSignals` | — | 初始化备份任务参数 |
+| `__init__` | `config: dict`, `files: dict[str, Path]`, `storage: StorageBackend`, `manifest_dir: Path`, `note: str`, `signals: BackupSignals` | — | 初始化单配置备份任务参数 |
 | `run()` | 无 | `None` | 执行全流程：哈希 → 增量对比 → 生成描述 → 存储 → 更新 manifest → 裁剪旧版本 |
+
+#### BackupSummary
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `results` | `list[BackupResult]` | 成功备份的结果列表 |
+| `skipped` | `list[str]` | 因无文件或无变化而跳过的配置名称列表 |
+| `errors` | `list[tuple[str, str]]` | 备份失败的（配置名, 错误信息）列表 |
+
+| 属性 | 返回 | 说明 |
+|------|------|------|
+| `success_count` | `int` | `len(results)` |
+| `total_count` | `int` | 所有配置的总数（含跳过的和失败的） |
+
+#### BatchBackupSignals (QObject)
+
+| 信号 | 参数 | 发射时机 |
+|------|------|----------|
+| `progress` | `int` | 每处理完一个配置时（按百分比） |
+| `message` | `str` | 当前配置的处理状态文字 |
+| `done` | `object` (BackupSummary) | 所有配置处理完毕时 |
+| `error` | `str` | 全局错误时 |
+
+#### BatchBackupWorker (QRunnable)
+
+| 方法 | 参数 | 返回值 | 核心作用 |
+|------|------|--------|----------|
+| `__init__` | `items: list[tuple[dict, dict[str, Path]]]`, `storage: StorageBackend`, `manifest_base_dir: Path`, `note: str`, `signals: BatchBackupSignals` | — | 初始化批量备份任务，`items` 为（配置字典, 文件字典）元组列表 |
+| `run()` | 无 | `None` | 遍历所有配置，逐个执行备份，收集结果到 BackupSummary，最终一次性 emit done |
 
 ### 特别说明
 
 - ⚠️ **QThread 后台线程**：`run()` 在 QThreadPool 管理的线程中执行，通过 Signals 回传结果到 GUI 线程。
 - `_prune_versions` 在每次备份后调用，超出 `max_versions` 的最旧版本被删除。
-- 当 `compute_changes` 返回空列表时，会向 GUI 发送 `files_count=0` 的 BackupResult，不执行实际写入。
+- `BatchBackupWorker` 是 GUI 中「备份」按钮的主要调用路径，替代了原有的信号链式调用，避免了跨线程信号丢失导致的备份中断。
 
 ---
 
