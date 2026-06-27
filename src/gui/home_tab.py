@@ -24,6 +24,8 @@ class HomeTab(QWidget):
         self.threadpool = QThreadPool()
         self._configs: dict[str, dict] = {}
         self._checkboxes: dict[str, QCheckBox] = {}
+        self._backup_signals: BatchBackupSignals | None = None
+        self._restore_signals: RestoreSignals | None = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -243,20 +245,21 @@ class HomeTab(QWidget):
                 self.restore_btn.setEnabled(True)
                 return
 
-        signals = BatchBackupSignals()
-        signals.progress.connect(self.progress_bar.setValue)
-        signals.message.connect(self.status_label.setText)
-        signals.done.connect(lambda summary: self._batch_backup_done(storage, summary))
-        signals.error.connect(lambda msg: self._backup_error(msg))
+        self._backup_signals = BatchBackupSignals()
+        self._backup_signals.progress.connect(self.progress_bar.setValue)
+        self._backup_signals.message.connect(self.status_label.setText)
+        self._backup_signals.done.connect(lambda summary: self._batch_backup_done(storage, summary))
+        self._backup_signals.error.connect(lambda msg: self._backup_error(msg))
 
         manifest_base_dir = Path(target_path_str)
-        worker = BatchBackupWorker(items, storage, manifest_base_dir, note, signals)
+        worker = BatchBackupWorker(items, storage, manifest_base_dir, note, self._backup_signals)
         self.threadpool.start(worker)
 
     def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self.progress_bar.setValue(100)
+        self._backup_signals = None
         self._refresh_history(storage)
         parts = []
         if summary.results:
@@ -287,6 +290,7 @@ class HomeTab(QWidget):
     def _backup_error(self, msg: str):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
+        self._backup_signals = None
         QMessageBox.critical(self, "备份失败", msg)
 
     def _restore(self):
@@ -321,30 +325,33 @@ class HomeTab(QWidget):
         self.restore_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
-        signals = RestoreSignals()
-        signals.progress.connect(self.progress_bar.setValue)
-        signals.message.connect(self.status_label.setText)
-        signals.done.connect(lambda result: self._restore_done(result))
-        signals.error.connect(lambda msg: self._restore_error(msg))
-        signals.file_blocked.connect(lambda msg, procs: self._handle_blocked(msg, procs))
+        self._restore_signals = RestoreSignals()
+        self._restore_signals.progress.connect(self.progress_bar.setValue)
+        self._restore_signals.message.connect(self.status_label.setText)
+        self._restore_signals.done.connect(lambda result: self._restore_done(result))
+        self._restore_signals.error.connect(lambda msg: self._restore_error(msg))
+        self._restore_signals.file_blocked.connect(lambda msg, procs: self._handle_blocked(msg, procs))
 
-        worker = RestoreWorker(cfg, self.storage, backup_id, None, signals)
+        worker = RestoreWorker(cfg, self.storage, backup_id, None, self._restore_signals)
         self.threadpool.start(worker)
 
     def _restore_done(self, result):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
+        self._restore_signals = None
         self.status_label.setText(f"恢复完成，已恢复 {len(result.files_restored)} 个文件")
         QMessageBox.information(self, "恢复完成", f"已成功恢复 {len(result.files_restored)} 个文件")
 
     def _restore_error(self, msg: str):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
+        self._restore_signals = None
         QMessageBox.critical(self, "恢复失败", msg)
 
     def _handle_blocked(self, msg: str, procs: list[str]):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
+        self._restore_signals = None
         proc_text = "\n".join(f"  • {p}" for p in procs)
         QMessageBox.warning(
             self, "文件被占用",
