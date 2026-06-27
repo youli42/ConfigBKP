@@ -4,10 +4,12 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QPlainTextEdit, QLabel, QMessageBox, QSplitter,
     QListWidget, QAbstractItemView, QListWidgetItem,
+    QTabWidget,
 )
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 from src.core.config_parser import load_config
+from src.gui.config_wizard import ConfigWizard, parse_to_form_data
 
 
 class ConfigTab(QWidget):
@@ -15,6 +17,8 @@ class ConfigTab(QWidget):
         super().__init__()
         self.config_dir = config_dir
         self._current_file: Path | None = None
+        self._wizard_dirty = False
+        self._source_dirty = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -25,6 +29,8 @@ class ConfigTab(QWidget):
         self.delete_btn = QPushButton("删除")
         top_bar.addWidget(self.new_btn)
         top_bar.addWidget(self.delete_btn)
+        self.mode_switcher = QTabWidget()
+        self.mode_switcher.setTabPosition(QTabWidget.TabPosition.North)
         top_bar.addStretch()
         layout.addLayout(top_bar)
 
@@ -35,21 +41,29 @@ class ConfigTab(QWidget):
         self.rule_list.currentItemChanged.connect(self._on_list_selected)
         splitter.addWidget(self.rule_list)
 
-        editor_widget = QWidget()
-        editor_layout = QVBoxLayout(editor_widget)
-        editor_layout.setContentsMargins(0, 0, 0, 0)
+        self._editor_tabs = QTabWidget()
+        self._editor_tabs.setTabPosition(QTabWidget.TabPosition.South)
 
         self.editor = QPlainTextEdit()
         self.editor.setPlaceholderText("在此编辑 JSONC 配置...")
         self.editor.setFont(QFont("Consolas", 10))
-        self.editor.textChanged.connect(self._validate)
-        editor_layout.addWidget(self.editor)
+        self.editor.textChanged.connect(self._on_source_changed)
+        self._editor_tabs.addTab(self.editor, "源码")
 
+        self.wizard = ConfigWizard()
+        self.wizard.set_on_finish(self._on_wizard_finish)
+        self._editor_tabs.addTab(self.wizard, "向导")
+
+        self._editor_tabs.currentChanged.connect(self._on_tab_switched)
+
+        editor_widget = QWidget()
+        editor_layout = QVBoxLayout(editor_widget)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.addWidget(self._editor_tabs)
         bottom_bar = QHBoxLayout()
         self.validation_label = QLabel("")
         self.validation_label.setStyleSheet("color: green;")
         bottom_bar.addWidget(self.validation_label)
-
         self.save_btn = QPushButton("保存")
         self.scan_btn = QPushButton("扫描本机已装软件")
         bottom_bar.addStretch()
@@ -68,6 +82,48 @@ class ConfigTab(QWidget):
         self.delete_btn.clicked.connect(self._delete_rule)
 
         self.refresh_rules()
+
+    def _on_source_changed(self):
+        self._source_dirty = True
+        text = self.editor.toPlainText()
+        if not text.strip():
+            self.validation_label.setText("")
+            return
+        try:
+            json5.loads(text)
+            self.validation_label.setText("语法正确 ✔")
+            self.validation_label.setStyleSheet("color: green;")
+        except Exception as e:
+            self.validation_label.setText(f"语法错误: {e}")
+            self.validation_label.setStyleSheet("color: red;")
+
+    def _on_tab_switched(self, idx: int):
+        if idx == 0:
+            content = self.wizard.get_jsonc()
+            self.editor.setPlainText(content)
+            self.editor.setFont(QFont("Consolas", 10))
+        elif idx == 1:
+            text = self.editor.toPlainText()
+            if text.strip():
+                try:
+                    cfg = json5.loads(text)
+                    self.wizard.load_rule(cfg)
+                except Exception:
+                    pass
+
+    def _on_wizard_finish(self, jsonc: str):
+        self._wizard_dirty = True
+        text = self.editor.toPlainText()
+        if text.strip():
+            try:
+                json5.loads(jsonc)
+            except Exception:
+                QMessageBox.critical(self, "错误", "生成的 JSONC 格式有误")
+                return
+        if self._current_file:
+            self._current_file.write_text(jsonc, encoding="utf-8")
+            self.validation_label.setText("已保存 ✔")
+            QMessageBox.information(self, "保存成功", f"已保存到 {self._current_file}")
 
     def refresh_rules(self):
         current_path = str(self._current_file) if self._current_file else ""
@@ -107,37 +163,39 @@ class ConfigTab(QWidget):
             try:
                 content = self._current_file.read_text(encoding="utf-8")
                 self.editor.setPlainText(content)
+                cfg = json5.loads(content)
+                self.wizard.load_rule(cfg)
+                self._editor_tabs.setCurrentIndex(0)
             except Exception as e:
                 self.editor.clear()
                 self.validation_label.setText(f"读取失败: {e}")
                 self.validation_label.setStyleSheet("color: red;")
 
-    def _validate(self):
-        text = self.editor.toPlainText()
-        if not text.strip():
-            self.validation_label.setText("")
-            return
-        try:
-            json5.loads(text)
-            self.validation_label.setText("语法正确 ✔")
-            self.validation_label.setStyleSheet("color: green;")
-        except Exception as e:
-            self.validation_label.setText(f"语法错误: {e}")
-            self.validation_label.setStyleSheet("color: red;")
-
     def _save(self):
         if not self._current_file:
             QMessageBox.warning(self, "提示", "请先选择或新建一个规则")
             return
-        text = self.editor.toPlainText()
-        try:
-            json5.loads(text)
-        except Exception as e:
-            QMessageBox.critical(self, "语法错误", f"无法保存，JSONC 语法错误:\n{e}")
-            return
-        self._current_file.write_text(text, encoding="utf-8")
-        self.validation_label.setText("已保存 ✔")
-        QMessageBox.information(self, "保存成功", f"已保存到 {self._current_file}")
+        tab_idx = self._editor_tabs.currentIndex()
+        if tab_idx == 0:
+            text = self.editor.toPlainText()
+            try:
+                json5.loads(text)
+            except Exception as e:
+                QMessageBox.critical(self, "语法错误", f"无法保存，JSONC 语法错误:\n{e}")
+                return
+            self._current_file.write_text(text, encoding="utf-8")
+            self.validation_label.setText("已保存 ✔")
+            QMessageBox.information(self, "保存成功", f"已保存到 {self._current_file}")
+        else:
+            jsonc = self.wizard.get_jsonc()
+            try:
+                json5.loads(jsonc)
+            except Exception as e:
+                QMessageBox.critical(self, "语法错误", f"生成的配置有误:\n{e}")
+                return
+            self._current_file.write_text(jsonc, encoding="utf-8")
+            self.validation_label.setText("已保存 ✔")
+            QMessageBox.information(self, "保存成功", f"已保存到 {self._current_file}")
 
     def _scan(self):
         from src.core.scanner import scan_installed
