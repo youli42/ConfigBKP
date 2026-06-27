@@ -4,12 +4,14 @@ from typing import Optional
 
 
 class BackupResult:
-    def __init__(self, backup_id: str, config_name: str, files_count: int, total_size: int, note: str = ""):
+    def __init__(self, backup_id: str, config_name: str, files_count: int, total_size: int, note: str = "",
+                 session_id: str = ""):
         self.backup_id = backup_id
         self.config_name = config_name
         self.files_count = files_count
         self.total_size = total_size
         self.note = note
+        self.session_id = session_id
 
 
 class RestoreResult:
@@ -20,21 +22,40 @@ class RestoreResult:
 
 
 class BackupVersion:
-    def __init__(self, backup_id: str, config_name: str, timestamp: str, note: str, description: str):
+    def __init__(self, backup_id: str, config_name: str, timestamp: str, note: str, description: str,
+                 session_id: str = ""):
         self.backup_id = backup_id
         self.config_name = config_name
         self.timestamp = timestamp
         self.note = note
         self.description = description
+        self.session_id = session_id
+
+
+class BackupSession:
+    def __init__(self, session_id: str, timestamp: str, note: str, config_names: list[str]):
+        self.session_id = session_id
+        self.timestamp = timestamp
+        self.note = note
+        self.config_names = config_names
+
+    @property
+    def total_count(self) -> int:
+        return len(self.config_names)
 
 
 class StorageBackend(ABC):
     @abstractmethod
-    def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str) -> BackupResult:
+    def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
+             session_id: str = "") -> BackupResult:
         ...
 
     @abstractmethod
     def list_versions(self, config_name: str) -> list[BackupVersion]:
+        ...
+
+    @abstractmethod
+    def list_sessions(self) -> list[BackupSession]:
         ...
 
     @abstractmethod

@@ -4,8 +4,13 @@ import shutil
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
-from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion
+from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession
 import tempfile
+
+
+def _read_meta_from_zip(zip_path: Path) -> dict:
+    with zipfile.ZipFile(zip_path) as zf:
+        return json.loads(zf.read(".metadata.json"))
 
 
 class ZipStorage(StorageBackend):
@@ -21,7 +26,8 @@ class ZipStorage(StorageBackend):
             self._temp_dir = Path(tempfile.mkdtemp(prefix="winbkp_"))
         return self._temp_dir
 
-    def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str) -> BackupResult:
+    def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
+             session_id: str = "") -> BackupResult:
         zip_path = self._zip_path(config_name, backup_id)
         zip_path.parent.mkdir(parents=True, exist_ok=True)
         total_size = 0
@@ -35,9 +41,10 @@ class ZipStorage(StorageBackend):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "note": note,
                 "description": description,
+                "session_id": session_id,
             }
             zf.writestr(".metadata.json", json.dumps(metadata, indent=2, ensure_ascii=False))
-        return BackupResult(backup_id, config_name, len(files), total_size, note)
+        return BackupResult(backup_id, config_name, len(files), total_size, note, session_id)
 
     def list_versions(self, config_name: str) -> list[BackupVersion]:
         cfg_dir = self.archive_dir / config_name
@@ -45,17 +52,50 @@ class ZipStorage(StorageBackend):
             return []
         versions = []
         for zip_file in sorted(cfg_dir.glob("*.zip"), reverse=True):
-            with zipfile.ZipFile(zip_file) as zf:
-                if ".metadata.json" in zf.namelist():
-                    meta = json.loads(zf.read(".metadata.json"))
-                    versions.append(BackupVersion(
-                        backup_id=meta["backup_id"],
-                        config_name=meta["config_name"],
-                        timestamp=meta["timestamp"],
-                        note=meta.get("note", ""),
-                        description=meta.get("description", ""),
-                    ))
+            meta = _read_meta_from_zip(zip_file)
+            versions.append(BackupVersion(
+                backup_id=meta["backup_id"],
+                config_name=meta["config_name"],
+                timestamp=meta["timestamp"],
+                note=meta.get("note", ""),
+                description=meta.get("description", ""),
+                session_id=meta.get("session_id", meta["backup_id"]),
+            ))
         return versions
+
+    def list_sessions(self) -> list[BackupSession]:
+        session_map: dict[str, dict] = {}
+        if not self.archive_dir.exists():
+            return []
+        for cfg_entry in sorted(self.archive_dir.iterdir()):
+            if not cfg_entry.is_dir():
+                continue
+            config_name = cfg_entry.name
+            for zip_file in sorted(cfg_entry.glob("*.zip"), reverse=True):
+                try:
+                    meta = _read_meta_from_zip(zip_file)
+                except Exception:
+                    continue
+                sid = meta.get("session_id", meta["backup_id"])
+                if sid not in session_map:
+                    session_map[sid] = {
+                        "session_id": sid,
+                        "timestamp": meta["timestamp"],
+                        "note": meta.get("note", ""),
+                        "config_names": [],
+                    }
+                cfg_name = meta.get("config_name", config_name)
+                if cfg_name not in session_map[sid]["config_names"]:
+                    session_map[sid]["config_names"].append(cfg_name)
+        sessions = []
+        for s in sorted(session_map.values(), key=lambda x: x["timestamp"], reverse=True):
+            sessions.append(BackupSession(
+                session_id=s["session_id"],
+                timestamp=s["timestamp"],
+                note=s["note"],
+                config_names=s["config_names"],
+            ))
+        return sessions
 
     def restore(self, config_name: str, backup_id: str, target_dir: Optional[Path] = None) -> RestoreResult:
         zip_path = self._zip_path(config_name, backup_id)

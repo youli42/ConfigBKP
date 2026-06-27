@@ -97,7 +97,8 @@ class BackupWorker(QRunnable):
 
 
 class BackupSummary:
-    def __init__(self):
+    def __init__(self, session_id: str = ""):
+        self.session_id = session_id
         self.results: list[BackupResult] = []
         self.skipped: list[str] = []
         self.errors: list[tuple[str, str]] = []
@@ -131,9 +132,10 @@ class BatchBackupWorker(QRunnable):
         self._config_index: dict[str, dict] = {}
 
     def run(self):
-        summary = BackupSummary()
+        session_id = "session_" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        summary = BackupSummary(session_id=session_id)
         total = len(self.items)
-        logger.debug("批量备份开始，共 %d 个配置", total)
+        logger.debug("批量备份开始，共 %d 个配置, session=%s", total, session_id)
         for idx, (cfg, files) in enumerate(self.items):
             name = cfg["name"]
             self._config_index[name] = cfg
@@ -156,11 +158,12 @@ class BatchBackupWorker(QRunnable):
                     self.signals.progress.emit(int((idx + 1) / total * 100))
                     continue
                 changed_files = {rel: fp for rel, fp in files.items() if fp in changed}
-                logger.debug("[%s] 备份 %d 文件 → %s", name, len(changed_files), backup_id)
+                logger.debug("[%s] 备份 %d 文件 → %s session=%s", name, len(changed_files), backup_id, session_id)
                 description = generate_description(name, cfg, changed_files)
                 result = self.storage.save(
                     backup_id=backup_id, config_name=name,
                     files=changed_files, note=self.note, description=description,
+                    session_id=session_id,
                 )
                 manifest_mgr.update_manifest(changed_files, backup_id)
                 self._prune_versions(name)

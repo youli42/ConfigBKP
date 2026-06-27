@@ -1,10 +1,12 @@
 from pathlib import Path
 import json5
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
-    QPlainTextEdit, QLabel, QMessageBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QPlainTextEdit, QLabel, QMessageBox, QSplitter,
+    QListWidget, QAbstractItemView, QListWidgetItem,
 )
 from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt
 from src.core.config_parser import load_config
 
 
@@ -19,11 +21,6 @@ class ConfigTab(QWidget):
         layout = QVBoxLayout(self)
 
         top_bar = QHBoxLayout()
-        top_bar.addWidget(QLabel("选择规则:"))
-        self.rule_selector = QComboBox()
-        self.rule_selector.currentIndexChanged.connect(self._on_rule_selected)
-        top_bar.addWidget(self.rule_selector)
-
         self.new_btn = QPushButton("新建")
         self.delete_btn = QPushButton("删除")
         top_bar.addWidget(self.new_btn)
@@ -31,11 +28,22 @@ class ConfigTab(QWidget):
         top_bar.addStretch()
         layout.addLayout(top_bar)
 
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        self.rule_list = QListWidget()
+        self.rule_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.rule_list.currentItemChanged.connect(self._on_list_selected)
+        splitter.addWidget(self.rule_list)
+
+        editor_widget = QWidget()
+        editor_layout = QVBoxLayout(editor_widget)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+
         self.editor = QPlainTextEdit()
         self.editor.setPlaceholderText("在此编辑 JSONC 配置...")
         self.editor.setFont(QFont("Consolas", 10))
         self.editor.textChanged.connect(self._validate)
-        layout.addWidget(self.editor)
+        editor_layout.addWidget(self.editor)
 
         bottom_bar = QHBoxLayout()
         self.validation_label = QLabel("")
@@ -47,7 +55,11 @@ class ConfigTab(QWidget):
         bottom_bar.addStretch()
         bottom_bar.addWidget(self.scan_btn)
         bottom_bar.addWidget(self.save_btn)
-        layout.addLayout(bottom_bar)
+        editor_layout.addLayout(bottom_bar)
+
+        splitter.addWidget(editor_widget)
+        splitter.setSizes([200, 500])
+        layout.addWidget(splitter)
 
         self.save_btn.clicked.connect(self._save)
         self.scan_btn.clicked.connect(self._scan)
@@ -57,9 +69,9 @@ class ConfigTab(QWidget):
         self.refresh_rules()
 
     def refresh_rules(self):
-        current = self.rule_selector.currentText()
-        self.rule_selector.blockSignals(True)
-        self.rule_selector.clear()
+        current_path = str(self._current_file) if self._current_file else ""
+        self.rule_list.blockSignals(True)
+        self.rule_list.clear()
         for sub in ["builtin", "user"]:
             sub_dir = self.config_dir / sub
             if not sub_dir.exists():
@@ -68,22 +80,27 @@ class ConfigTab(QWidget):
                 try:
                     cfg = load_config(fpath)
                     name = cfg.get("name", fpath.stem)
-                    self.rule_selector.addItem(name, str(fpath))
+                    item = QListWidgetItem(name)
+                    item.setData(Qt.ItemDataRole.UserRole, str(fpath))
+                    item.setToolTip(str(fpath))
+                    self.rule_list.addItem(item)
                 except Exception:
                     continue
-        idx = self.rule_selector.findText(current)
-        if idx >= 0:
-            self.rule_selector.setCurrentIndex(idx)
-        self.rule_selector.blockSignals(False)
-        if self.rule_selector.count() > 0:
-            self._on_rule_selected(0)
+        self.rule_list.blockSignals(False)
+        if current_path:
+            for i in range(self.rule_list.count()):
+                if self.rule_list.item(i).data(Qt.ItemDataRole.UserRole) == current_path:
+                    self.rule_list.setCurrentRow(i)
+                    return
+        if self.rule_list.count() > 0:
+            self.rule_list.setCurrentRow(0)
 
-    def _on_rule_selected(self, index: int):
-        if index < 0:
+    def _on_list_selected(self, current: QListWidgetItem | None, previous: QListWidgetItem | None):
+        if not current:
             self.editor.clear()
             self._current_file = None
             return
-        fpath_str = self.rule_selector.itemData(index)
+        fpath_str = current.data(Qt.ItemDataRole.UserRole)
         if fpath_str:
             self._current_file = Path(fpath_str)
             try:
@@ -152,9 +169,9 @@ class ConfigTab(QWidget):
         new_file = user_dir / f"new_rule_{len(list(user_dir.glob('*.jsonc'))) + 1}.jsonc"
         new_file.write_text(template, encoding="utf-8")
         self.refresh_rules()
-        for i in range(self.rule_selector.count()):
-            if self.rule_selector.itemData(i) == str(new_file):
-                self.rule_selector.setCurrentIndex(i)
+        for i in range(self.rule_list.count()):
+            if self.rule_list.item(i).data(Qt.ItemDataRole.UserRole) == str(new_file):
+                self.rule_list.setCurrentRow(i)
                 break
         QMessageBox.information(self, "已创建", f"已创建新规则:\n{new_file}")
 
@@ -167,4 +184,5 @@ class ConfigTab(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._current_file.unlink()
+            self._current_file = None
             self.refresh_rules()

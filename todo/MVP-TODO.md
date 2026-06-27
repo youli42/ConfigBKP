@@ -75,6 +75,85 @@
 
 ---
 
+## Phase 10：备份历史双栏 + 规则管理双栏
+
+### 概述
+
+两个 UI 重设计：
+1. **备份历史**：单表 → 左（session 记录）+ 右（session 内 config 详情 + 恢复按钮）
+2. **规则管理**：下拉框 + 编辑器 → 左（文件列表）+ 右（编辑器）
+
+通过 `session_id` 字段实现批次分组。该字段独立于 `backup_id`，在 `BatchBackupWorker.run()` 开始处生成，所有同批 config 共享。
+
+### 涉及的数据类变更
+
+```
+新增 BackupSession:
+  session_id: str, timestamp: str, note: str,
+  config_names: list[str], total_count: int
+
+BackupResult 新增字段: session_id: str
+StorageBackend.save() 新增参数: session_id: str
+StorageBackend 新增抽象方法: list_sessions() → list[BackupSession]
+```
+
+### Step 1：`storage/base.py`
+
+- [ ] 1.1 新增 `BackupSession` 数据类（session_id, timestamp, note, config_names, total_count）
+- [ ] 1.2 `BackupResult.__init__` 新增 `session_id: str = ""` 参数
+- [ ] 1.3 `StorageBackend.save()` 新增 `session_id: str` 参数
+- [ ] 1.4 `StorageBackend` 新增抽象方法 `list_sessions() → list[BackupSession]`
+
+### Step 2：`storage/local.py`
+
+- [ ] 2.1 `save()` 将 `session_id` 写入 `.metadata.json`
+- [ ] 2.2 `list_sessions()` 遍历所有 config 的版本，聚合相同 session_id（含兼容旧备份：无 session_id 时回退为 backup_id）
+
+### Step 3：`storage/zip_storage.py`
+
+- [ ] 3.1 `save()` 将 `session_id` 写入 zip 内 `.metadata.json`
+- [ ] 3.2 `list_sessions()` 同 local.py 逻辑对齐
+
+### Step 4：`core/backup_engine.py`
+
+- [ ] 4.1 `BackupSummary.__init__` 新增 `session_id: str = ""`
+- [ ] 4.2 `BatchBackupWorker.run()` 开始在循环外生成 `session_id = "session_" + datetime.now().strftime("%Y%m%d-%H%M%S")`
+- [ ] 4.3 `storage.save()` 调用传参 `session_id=self.session_id`
+
+### Step 5：`gui/home_tab.py` — 备份历史双栏
+
+- [ ] 5.1 底部 QGroupBox 内替换为 QSplitter（水平）
+  - 左栏: QTableWidget（列: 时间, 备注, 配置数）
+  - 右栏: QTableWidget（列: 配置名, 状态, 文件数）+ "恢复此批次" 按钮
+- [ ] 5.2 新增 `_refresh_sessions()` 调用 `storage.list_sessions()` 填充左栏
+- [ ] 5.3 新增 `_on_session_selected(row)` 按 session_id 过滤版本填充右栏
+- [ ] 5.4 "恢复此批次" 按钮回调：遍历右栏 configs 逐个执行 RestoreWorker
+- [ ] 5.5 `_batch_backup_done()` 改为调用 `_refresh_sessions()`
+- [ ] 5.6 `refresh_configs()` 改为调用 `_refresh_sessions()`
+- [ ] 5.7 移除旧的 `_refresh_history()` 和 QTableWidget 单表
+- [ ] 5.8 移除 restore 方法中的历史行依赖（改从右栏 session 获取）
+
+### Step 6：`gui/config_tab.py` — 规则管理双栏
+
+- [ ] 6.1 `_setup_ui()` 替换为 QSplitter（水平）
+  - 左栏: QListWidget（显示规则名，itemData 存文件路径）
+  - 右栏: QPlainTextEdit + 底部按钮行
+- [ ] 6.2 `refresh_rules()` 改为填充 QListWidget（保留 builtin/user 顺序）
+- [ ] 6.3 替换 `_on_rule_selected` 为列表选中事件 `_on_list_selected`
+- [ ] 6.4 移除 QComboBox 及相关代码
+- [ ] 6.5 新建/删除后调用 `refresh_rules()` 并高亮对应项
+
+### Step 7：验证 + doc
+
+- [ ] 7.1 语法检查 + import 验证
+- [ ] 7.2 全量/增量备份测试 → session 分组正常
+- [ ] 7.3 恢复批次测试 → 逐个配置恢复
+- [ ] 7.4 旧备份兼容测试（无 session_id → 回退 backup_id）
+- [ ] 7.5 双栏 UI 交互测试（列表选中/右键/恢复按钮）
+- [ ] 7.6 更新 `doc/04-界面层.md`、`doc/07-数据模型.md`、`doc/03-存储后端.md`
+
+---
+
 ## 完成进度
 
 - [x] Phase 1 完成
@@ -86,3 +165,4 @@
 - [x] Phase 7 完成
 - [x] Phase 8 完成
 - [x] Phase 9 完成
+- [ ] Phase 10 进行中
