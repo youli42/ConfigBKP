@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QComboBox, QFileDialog, QMessageBox, QAbstractItemView,
     QSplitter, QFrame,
 )
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 
 from src.core.config_parser import load_config, filter_by_platform, generate_description
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
@@ -187,7 +187,7 @@ class HomeTab(QWidget):
                 for v in versions:
                     if v.session_id == sess.session_id:
                         self._session_data.setdefault(sess.session_id, []).append(
-                            (v.config_name, v.backup_id, v.description[:60] if v.description else "")
+                            (v.config_name, v.backup_id)
                         )
             row = self.session_table.rowCount()
             self.session_table.insertRow(row)
@@ -289,12 +289,12 @@ class HomeTab(QWidget):
             return
         sid = self.session_table.item(rows[0].row(), 0).data(Qt.ItemDataRole.UserRole)
         entries = self._session_data.get(sid, [])
-        for config_name, backup_id, desc in entries:
+        for config_name, backup_id in entries:
             row = self.detail_table.rowCount()
             self.detail_table.insertRow(row)
             self.detail_table.setItem(row, 0, QTableWidgetItem(config_name))
             self.detail_table.setItem(row, 1, QTableWidgetItem(""))
-            self.detail_table.setItem(row, 2, QTableWidgetItem(desc))
+            self.detail_table.setItem(row, 2, QTableWidgetItem(""))
             self.detail_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, backup_id)
         self._selected_session_id = sid
 
@@ -358,6 +358,9 @@ class HomeTab(QWidget):
         self.threadpool.start(worker)
 
     def _restore_selected(self):
+        if self._is_restoring:
+            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            return
         rows = self.detail_table.selectedItems()
         if not rows:
             QMessageBox.warning(self, "提示", "请在右侧详情表中选择要恢复的配置")
@@ -374,6 +377,9 @@ class HomeTab(QWidget):
             self._restore_single(config_name, backup_id)
 
     def _restore_session(self):
+        if self._is_restoring:
+            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            return
         if not hasattr(self, '_selected_session_id') or not self._selected_session_id:
             QMessageBox.warning(self, "提示", "请先在左侧选择一个备份记录")
             return
@@ -398,18 +404,18 @@ class HomeTab(QWidget):
             self.status_label.setText("批次恢复完成")
             QMessageBox.information(self, "恢复完成", "批次中所有配置已恢复")
             return
-        config_name, backup_id, _ = self._restore_session_queue.pop(0)
+        config_name, backup_id = self._restore_session_queue.pop(0)
         self._restore_single(config_name, backup_id)
 
     def _restore_done(self, result):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._restore_signals = None
-        self._is_restoring = False
         self.status_label.setText(f"已恢复 {result.config_name}")
         if hasattr(self, '_restore_session_queue') and self._restore_session_queue:
-            self._restore_next_in_session()
+            QTimer.singleShot(0, self._restore_next_in_session)
         else:
+            self._is_restoring = False
             self._restore_session_queue = []
             QMessageBox.information(self, "恢复完成", f"已成功恢复 {result.config_name}")
 

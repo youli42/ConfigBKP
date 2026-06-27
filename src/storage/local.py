@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
-from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession, \
-    build_sessions_from_meta
+from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession
+from src.storage._utils import build_sessions_from_meta
 
 
 def _read_meta(meta_path: Path) -> dict:
