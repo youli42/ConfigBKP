@@ -9,24 +9,23 @@ from src.storage._utils import build_sessions_from_meta
 import tempfile
 
 
-def _check_zip_path(name: str) -> bool:
-    p = PurePosixPath(name)
-    return ".." not in p.parts and not p.is_absolute()
-
-
 def _read_meta_from_zip(zip_path: Path) -> dict:
     with zipfile.ZipFile(zip_path) as zf:
         return json.loads(zf.read(".metadata.json"))
 
 
-def _safe_extract(zf: zipfile.ZipFile, extract_dir: Path):
-    for name in zf.namelist():
-        if not _check_zip_path(name):
-            raise ValueError(f"不安全的 ZIP 路径: {name}")
-        zf.extract(name, extract_dir)
-
-
 class ZipStorage(StorageBackend):
+    @staticmethod
+    def _check_zip_path(name: str) -> bool:
+        p = PurePosixPath(name)
+        return ".." not in p.parts and not p.is_absolute()
+
+    @staticmethod
+    def _safe_extract(zf: zipfile.ZipFile, extract_dir: Path):
+        for name in zf.namelist():
+            if not ZipStorage._check_zip_path(name):
+                raise ValueError(f"不安全的 ZIP 路径: {name}")
+            zf.extract(name, extract_dir)
     def __init__(self, archive_dir: Path):
         self.archive_dir = archive_dir
         self._temp_dir: Optional[Path] = None
@@ -105,7 +104,7 @@ class ZipStorage(StorageBackend):
         extract_dir = self._ensure_temp() / backup_id
         extract_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
-            _safe_extract(zf, extract_dir)
+            ZipStorage._safe_extract(zf, extract_dir)
         for item in extract_dir.rglob("*"):
             if item.is_file() and item.name != ".metadata.json":
                 rel = item.relative_to(extract_dir)
@@ -126,7 +125,7 @@ class ZipStorage(StorageBackend):
         extract_dir = self._ensure_temp() / backup_id
         extract_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
-            _safe_extract(zf, extract_dir)
+            ZipStorage._safe_extract(zf, extract_dir)
         files = {}
         for item in extract_dir.rglob("*"):
             if item.is_file() and item.name != ".metadata.json":
