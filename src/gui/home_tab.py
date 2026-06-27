@@ -15,6 +15,7 @@ from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
 from src.utils.path_expander import expand
 from src.utils.time_util import utc_to_local
+from src.utils.i18n import tr
 
 
 class HomeTab(QWidget):
@@ -35,9 +36,9 @@ class HomeTab(QWidget):
         layout = QVBoxLayout(self)
 
         top_bar = QHBoxLayout()
-        self.scan_btn = QPushButton("扫描本机已装软件")
-        self.select_all_btn = QPushButton("全选")
-        self.deselect_all_btn = QPushButton("取消全选")
+        self.scan_btn = QPushButton(tr("扫描本机已装软件"))
+        self.select_all_btn = QPushButton(tr("全选"))
+        self.deselect_all_btn = QPushButton(tr("取消全选"))
         top_bar.addWidget(self.scan_btn)
         top_bar.addWidget(self.select_all_btn)
         top_bar.addWidget(self.deselect_all_btn)
@@ -50,7 +51,7 @@ class HomeTab(QWidget):
         upper_layout = QHBoxLayout(upper)
         upper_layout.setContentsMargins(0, 0, 0, 0)
 
-        left_group = QGroupBox("配置规则")
+        left_group = QGroupBox(tr("配置规则"))
         left_layout = QVBoxLayout(left_group)
         self.config_list = QWidget()
         self.config_list_layout = QVBoxLayout(self.config_list)
@@ -62,20 +63,20 @@ class HomeTab(QWidget):
         left_layout.addWidget(scroll_area)
         upper_layout.addWidget(left_group)
 
-        right_group = QGroupBox("操作")
+        right_group = QGroupBox(tr("操作"))
         right_layout = QVBoxLayout(right_group)
 
         self.note_input = QTextEdit()
-        self.note_input.setPlaceholderText("备份备注（可选）")
+        self.note_input.setPlaceholderText(tr("备份备注（可选）"))
         self.note_input.setMaximumHeight(60)
-        right_layout.addWidget(QLabel("备注:"))
+        right_layout.addWidget(QLabel(tr("备注:")))
         right_layout.addWidget(self.note_input)
 
         target_layout = QHBoxLayout()
-        target_layout.addWidget(QLabel("备份目标:"))
+        target_layout.addWidget(QLabel(tr("备份目标:")))
         self.target_combo = QComboBox()
-        self.target_combo.addItems(["本地目录", "ZIP 打包"])
-        self.target_browse_btn = QPushButton("浏览...")
+        self.target_combo.addItems([tr("本地目录"), tr("ZIP 打包")])
+        self.target_browse_btn = QPushButton(tr("浏览..."))
         self.target_path_label = QLabel(str(self.storage.base_dir))
         target_layout.addWidget(self.target_combo)
         target_layout.addWidget(self.target_browse_btn)
@@ -84,9 +85,9 @@ class HomeTab(QWidget):
         right_layout.addLayout(target_layout)
 
         btn_layout = QHBoxLayout()
-        self.backup_btn = QPushButton("备份")
+        self.backup_btn = QPushButton(tr("备份"))
         self.backup_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px 24px;")
-        self.restore_btn = QPushButton("恢复")
+        self.restore_btn = QPushButton(tr("恢复"))
         self.restore_btn.setStyleSheet("background-color: #FF5722; color: white; padding: 8px 24px;")
         btn_layout.addWidget(self.backup_btn)
         btn_layout.addWidget(self.restore_btn)
@@ -96,19 +97,19 @@ class HomeTab(QWidget):
         self.progress_bar = QProgressBar()
         right_layout.addWidget(self.progress_bar)
 
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel(tr("就绪"))
         right_layout.addWidget(self.status_label)
 
         upper_layout.addWidget(right_group)
         splitter.addWidget(upper)
 
-        bottom_group = QGroupBox("备份历史")
+        bottom_group = QGroupBox(tr("备份历史"))
         bottom_layout = QVBoxLayout(bottom_group)
         history_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.session_table = QTableWidget()
         self.session_table.setColumnCount(3)
-        self.session_table.setHorizontalHeaderLabels(["时间", "备注", "配置数"])
+        self.session_table.setHorizontalHeaderLabels([tr("时间"), tr("备注"), tr("配置数")])
         self.session_table.horizontalHeader().setStretchLastSection(True)
         self.session_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.session_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -120,18 +121,18 @@ class HomeTab(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         self.detail_table = QTableWidget()
         self.detail_table.setColumnCount(4)
-        self.detail_table.setHorizontalHeaderLabels(["", "配置", "版本", "描述"])
+        self.detail_table.setHorizontalHeaderLabels(["", tr("配置"), tr("版本"), tr("描述")])
         self.detail_table.horizontalHeader().setStretchLastSection(True)
         self.detail_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.detail_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.detail_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.restore_session_btn = QPushButton("恢复此批次")
+        self.restore_session_btn = QPushButton(tr("恢复此批次"))
         self.restore_session_btn.setStyleSheet("background-color: #FF5722; color: white; padding: 6px 16px;")
 
         check_btn_layout = QHBoxLayout()
-        self.select_all_detail_btn = QPushButton("全选")
-        self.deselect_all_detail_btn = QPushButton("取消全选")
-        self.invert_detail_btn = QPushButton("反选")
+        self.select_all_detail_btn = QPushButton(tr("全选"))
+        self.deselect_all_detail_btn = QPushButton(tr("取消全选"))
+        self.invert_detail_btn = QPushButton(tr("反选"))
         check_btn_layout.addWidget(self.select_all_detail_btn)
         check_btn_layout.addWidget(self.deselect_all_detail_btn)
         check_btn_layout.addWidget(self.invert_detail_btn)
@@ -209,10 +210,10 @@ class HomeTab(QWidget):
             self._session_data["__latest__"] = latest_entries
             row = self.session_table.rowCount()
             self.session_table.insertRow(row)
-            item = QTableWidgetItem("📌 最新配置")
+            item = QTableWidgetItem(tr("最新配置"))
             item.setData(Qt.ItemDataRole.UserRole, "__latest__")
             self.session_table.setItem(row, 0, item)
-            self.session_table.setItem(row, 1, QTableWidgetItem(f"共 {len(latest_entries)} 个配置的最新版本"))
+            self.session_table.setItem(row, 1, QTableWidgetItem(tr("共 {} 个配置的最新版本").format(len(latest_entries))))
             self.session_table.setItem(row, 2, QTableWidgetItem(str(len(latest_entries))))
 
         for sess in sessions:
@@ -235,7 +236,7 @@ class HomeTab(QWidget):
         matched = scan_installed([self.config_dir / "builtin", self.config_dir / "user"])
         for name, cb in self._checkboxes.items():
             cb.setChecked(name in matched)
-        self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
+        self.status_label.setText(tr("扫描完成，匹配 {} 条规则").format(len(matched)))
 
     def _select_all(self):
         for cb in self._checkboxes.values():
@@ -246,7 +247,7 @@ class HomeTab(QWidget):
             cb.setChecked(False)
 
     def _browse_target(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择备份目标目录")
+        folder = QFileDialog.getExistingDirectory(self, tr("选择备份目标目录"))
         if folder:
             self.target_path_label.setText(folder)
 
@@ -259,14 +260,13 @@ class HomeTab(QWidget):
 
     def _backup(self):
         if self._is_backing_up:
-            QMessageBox.warning(self, "提示", "正在执行备份操作，请等待完成")
+            QMessageBox.warning(self, tr("提示"), tr("正在执行备份操作，请等待完成"))
             return
         configs = self._get_selected_configs()
         if not configs:
-            QMessageBox.warning(self, "提示", "请先选择要备份的配置")
+            QMessageBox.warning(self, tr("提示"), tr("请先选择要备份的配置"))
             return
         self._is_backing_up = True
-
         self.backup_btn.setEnabled(False)
         self.restore_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -300,9 +300,9 @@ class HomeTab(QWidget):
         skipped = [cfg["name"] for cfg, files in items if not files]
         if skipped:
             reply = QMessageBox.question(
-                self, "路径不存在",
-                f"以下配置的源文件路径不存在，将被跳过：\n" + "\n".join(f"  • {n}" for n in skipped) +
-                "\n\n是否继续备份其他配置？",
+                self, tr("路径不存在"),
+                tr("以下配置的源文件路径不存在，将被跳过：\n{}\n\n是否继续备份其他配置？").format(
+                    "\n".join(f"  \u2022 {n}" for n in skipped)),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:
@@ -320,6 +320,46 @@ class HomeTab(QWidget):
         manifest_base_dir = Path(target_path_str)
         worker = BatchBackupWorker(items, storage, manifest_base_dir, note, self._backup_signals)
         self.threadpool.start(worker)
+
+    def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
+        self.backup_btn.setEnabled(True)
+        self.restore_btn.setEnabled(True)
+        self.progress_bar.setValue(100)
+        self._backup_signals = None
+        self._is_backing_up = False
+        self._refresh_sessions(storage)
+        parts = []
+        if summary.results:
+            total_files = sum(r.files_count for r in summary.results)
+            parts.append(tr("成功: {} 个配置 ({} 文件)").format(len(summary.results), total_files))
+        if summary.skipped:
+            parts.append(tr("跳过: {} 个").format(len(summary.skipped)))
+        if summary.errors:
+            parts.append(tr("失败: {} 个").format(len(summary.errors)))
+        msg = " | ".join(parts) if parts else tr("无任何操作")
+        self.status_label.setText(tr("备份完成: {}").format(msg))
+        lines = []
+        if summary.results:
+            lines.append(tr("已备份:"))
+            for r in summary.results:
+                lines.append(tr("  ✓ {} ({} 文件)").format(r.config_name, r.files_count))
+        if summary.skipped:
+            lines.append(tr("已跳过:"))
+            for name in summary.skipped:
+                lines.append(tr("  - {}").format(name))
+        if summary.errors:
+            lines.append(tr("失败:"))
+            for name, err in summary.errors:
+                lines.append(tr("  ✗ {}: {}").format(name, err))
+        if lines:
+            QMessageBox.information(self, tr("备份结果"), "\n".join(lines))
+
+    def _backup_error(self, msg: str):
+        self.backup_btn.setEnabled(True)
+        self.restore_btn.setEnabled(True)
+        self._backup_signals = None
+        self._is_backing_up = False
+        QMessageBox.critical(self, tr("备份失败"), msg)
 
     def _on_session_selected(self):
         self.detail_table.setRowCount(0)
@@ -360,53 +400,13 @@ class HomeTab(QWidget):
                 state = cb.checkState()
                 cb.setCheckState(Qt.CheckState.Unchecked if state == Qt.CheckState.Checked else Qt.CheckState.Checked)
 
-    def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
-        self.backup_btn.setEnabled(True)
-        self.restore_btn.setEnabled(True)
-        self.progress_bar.setValue(100)
-        self._backup_signals = None
-        self._is_backing_up = False
-        self._refresh_sessions(storage)
-        parts = []
-        if summary.results:
-            total_files = sum(r.files_count for r in summary.results)
-            parts.append(f"成功: {len(summary.results)} 个配置 ({total_files} 文件)")
-        if summary.skipped:
-            parts.append(f"跳过: {len(summary.skipped)} 个")
-        if summary.errors:
-            parts.append(f"失败: {len(summary.errors)} 个")
-        msg = " | ".join(parts) if parts else "无任何操作"
-        self.status_label.setText(f"备份完成: {msg}")
-        lines = []
-        if summary.results:
-            lines.append("已备份:")
-            for r in summary.results:
-                lines.append(f"  ✓ {r.config_name} ({r.files_count} 文件)")
-        if summary.skipped:
-            lines.append("已跳过:")
-            for name in summary.skipped:
-                lines.append(f"  - {name}")
-        if summary.errors:
-            lines.append("失败:")
-            for name, err in summary.errors:
-                lines.append(f"  ✗ {name}: {err}")
-        if lines:
-            QMessageBox.information(self, "备份结果", "\n".join(lines))
-
-    def _backup_error(self, msg: str):
-        self.backup_btn.setEnabled(True)
-        self.restore_btn.setEnabled(True)
-        self._backup_signals = None
-        self._is_backing_up = False
-        QMessageBox.critical(self, "备份失败", msg)
-
     def _restore_single(self, config_name: str, backup_id: str):
         if self._is_restoring:
-            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            QMessageBox.warning(self, tr("提示"), tr("正在执行恢复操作，请等待完成"))
             return
         cfg = self._configs.get(config_name)
         if not cfg:
-            QMessageBox.critical(self, "错误", f"未找到配置规则: {config_name}")
+            QMessageBox.critical(self, tr("错误"), tr("未找到配置规则: {}").format(config_name))
             return
         self._is_restoring = True
         self.backup_btn.setEnabled(False)
@@ -423,7 +423,7 @@ class HomeTab(QWidget):
 
     def _restore_selected(self):
         if self._is_restoring:
-            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            QMessageBox.warning(self, tr("提示"), tr("正在执行恢复操作，请等待完成"))
             return
         items = []
         for r in range(self.detail_table.rowCount()):
@@ -433,12 +433,12 @@ class HomeTab(QWidget):
                 backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
                 items.append((config_name, backup_id))
         if not items:
-            QMessageBox.warning(self, "提示", "请先在右侧勾选要恢复的配置")
+            QMessageBox.warning(self, tr("提示"), tr("请先在右侧勾选要恢复的配置"))
             return
         names = [n for n, _ in items]
         reply = QMessageBox.question(
-            self, "确认恢复",
-            f"将依次恢复以下 {len(names)} 个配置：\n" + "\n".join(f"  • {n}" for n in names),
+            self, tr("确认恢复"),
+            tr("将依次恢复以下 {} 个配置：\n{}").format(len(names), "\n".join(f"  \u2022 {n}" for n in names)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
@@ -447,10 +447,10 @@ class HomeTab(QWidget):
 
     def _restore_session(self):
         if self._is_restoring:
-            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            QMessageBox.warning(self, tr("提示"), tr("正在执行恢复操作，请等待完成"))
             return
         if not hasattr(self, '_selected_session_id') or not self._selected_session_id:
-            QMessageBox.warning(self, "提示", "请先在左侧选择一个备份记录")
+            QMessageBox.warning(self, tr("提示"), tr("请先在左侧选择一个备份记录"))
             return
         items = []
         for r in range(self.detail_table.rowCount()):
@@ -458,12 +458,12 @@ class HomeTab(QWidget):
             backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
             items.append((config_name, backup_id))
         if not items:
-            QMessageBox.information(self, "提示", "该备份记录无可恢复的版本")
+            QMessageBox.information(self, tr("提示"), tr("该备份记录无可恢复的版本"))
             return
         names = [n for n, _ in items]
         reply = QMessageBox.question(
-            self, "确认恢复批次",
-            f"将依次恢复以下 {len(names)} 个配置：\n" + "\n".join(f"  • {n}" for n in names),
+            self, tr("确认恢复批次"),
+            tr("将依次恢复以下 {} 个配置：\n{}").format(len(names), "\n".join(f"  \u2022 {n}" for n in names)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
@@ -474,8 +474,8 @@ class HomeTab(QWidget):
         if not self._restore_session_queue:
             self._is_restoring = False
             self._restore_session_queue = []
-            self.status_label.setText("批次恢复完成")
-            QMessageBox.information(self, "恢复完成", "批次中所有配置已恢复")
+            self.status_label.setText(tr("批次恢复完成"))
+            QMessageBox.information(self, tr("恢复完成"), tr("批次中所有配置已恢复"))
             return
         config_name, backup_id = self._restore_session_queue.pop(0)
         self._restore_single(config_name, backup_id)
@@ -484,13 +484,13 @@ class HomeTab(QWidget):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._restore_signals = None
-        self.status_label.setText(f"已恢复 {result.config_name}")
+        self.status_label.setText(tr("已恢复 {}").format(result.config_name))
         if hasattr(self, '_restore_session_queue') and self._restore_session_queue:
             QTimer.singleShot(0, self._restore_next_in_session)
         else:
             self._is_restoring = False
             self._restore_session_queue = []
-            QMessageBox.information(self, "恢复完成", f"已成功恢复 {result.config_name}")
+            QMessageBox.information(self, tr("恢复完成"), tr("已成功恢复 {}").format(result.config_name))
 
     def _restore_error(self, msg: str):
         self.backup_btn.setEnabled(True)
@@ -498,7 +498,7 @@ class HomeTab(QWidget):
         self._restore_signals = None
         self._is_restoring = False
         self._restore_session_queue = []
-        QMessageBox.critical(self, "恢复失败", msg)
+        QMessageBox.critical(self, tr("恢复失败"), msg)
 
     def _handle_blocked(self, msg: str, procs: list[str]):
         self.backup_btn.setEnabled(True)
@@ -506,8 +506,8 @@ class HomeTab(QWidget):
         self._restore_signals = None
         self._is_restoring = False
         self._restore_session_queue = []
-        proc_text = "\n".join(f"  • {p}" for p in procs)
+        proc_text = "\n".join(f"  \u2022 {p}" for p in procs)
         QMessageBox.warning(
-            self, "文件被占用",
-            f"{msg}\n请关闭以下程序后重试：\n{proc_text}\n\n或使用设置中的「重启时替换」功能。"
+            self, tr("文件被占用"),
+            tr("{}\n请关闭以下程序后重试：\n{}\n\n或使用设置中的「重启时替换」功能。").format(msg, proc_text)
         )

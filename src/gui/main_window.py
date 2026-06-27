@@ -4,12 +4,13 @@ from src.gui.config_tab import ConfigTab
 from src.gui.settings_tab import SettingsTab
 from src.storage.local import LocalStorage
 from src.utils.app_path import get_config_dir, get_default_backup_dir
+from src.utils.i18n import tr
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("WinConfigBKP - Windows 配置文件备份工具")
+        self.setWindowTitle(tr("WinConfigBKP - Windows 配置文件备份工具"))
         self.setMinimumSize(900, 650)
 
         config_dir = get_config_dir()
@@ -25,9 +26,9 @@ class MainWindow(QMainWindow):
         self.config_tab = ConfigTab(config_dir)
         self.settings_tab = SettingsTab(self.storage)
 
-        self.tabs.addTab(self.home_tab, "备份/恢复")
-        self.tabs.addTab(self.config_tab, "规则管理")
-        self.tabs.addTab(self.settings_tab, "设置")
+        self.tabs.addTab(self.home_tab, tr("备份/恢复"))
+        self.tabs.addTab(self.config_tab, tr("规则管理"))
+        self.tabs.addTab(self.settings_tab, tr("设置"))
 
         self.setCentralWidget(self.tabs)
 

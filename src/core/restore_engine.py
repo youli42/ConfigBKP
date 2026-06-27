@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 
 from src.storage.base import StorageBackend, RestoreResult
 from src.utils.file_locker import is_file_locked, schedule_reboot_replace, get_locked_processes
+from src.utils.i18n import tr
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class RestoreWorker(QRunnable):
         try:
             config_name = self.config["name"]
 
-            self.signals.message.emit("正在读取备份文件...")
+            self.signals.message.emit(tr("正在读取备份文件..."))
             self.signals.progress.emit(10)
 
             backup_files = self.storage.get_files(config_name, self.backup_id)
@@ -49,7 +50,7 @@ class RestoreWorker(QRunnable):
             import tempfile
             backup_dir = Path(tempfile.mkdtemp(prefix="restore_undo_"))
 
-            self.signals.message.emit("正在检测文件占用...")
+            self.signals.message.emit(tr("正在检测文件占用..."))
             self.signals.progress.emit(30)
 
             locked_files: list[Path] = []
@@ -95,7 +96,7 @@ class RestoreWorker(QRunnable):
                 )
                 return
 
-            self.signals.message.emit("恢复前正在备份当前文件...")
+            self.signals.message.emit(tr("恢复前正在备份当前文件..."))
             self.signals.progress.emit(50)
 
             for _, (_, dst) in src_files.items():
@@ -103,7 +104,7 @@ class RestoreWorker(QRunnable):
                     undo_path = backup_dir / dst.name
                     shutil.copy2(dst, undo_path)
 
-            self.signals.message.emit("正在恢复文件...")
+            self.signals.message.emit(tr("正在恢复文件..."))
             self.signals.progress.emit(70)
 
             restored = []
@@ -126,7 +127,7 @@ class RestoreWorker(QRunnable):
             shutil.rmtree(backup_dir, ignore_errors=True)
             logger.debug("[%s] 恢复完成，%d 文件", config_name, len(restored))
             self.signals.progress.emit(100)
-            self.signals.message.emit("恢复完成")
+            self.signals.message.emit(tr("恢复完成"))
             self.signals.done.emit(RestoreResult(config_name, restored, []))
 
         except Exception as e:
