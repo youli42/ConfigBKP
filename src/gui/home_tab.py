@@ -117,9 +117,10 @@ class HomeTab(QWidget):
         detail_layout = QVBoxLayout(detail_widget)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         self.detail_table = QTableWidget()
-        self.detail_table.setColumnCount(3)
-        self.detail_table.setHorizontalHeaderLabels(["配置", "文件数", "描述"])
+        self.detail_table.setColumnCount(4)
+        self.detail_table.setHorizontalHeaderLabels(["", "配置", "版本", "描述"])
         self.detail_table.horizontalHeader().setStretchLastSection(True)
+        self.detail_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.detail_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.detail_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.restore_session_btn = QPushButton("恢复此批次")
@@ -180,7 +181,24 @@ class HomeTab(QWidget):
         self.detail_table.setRowCount(0)
         s = storage or self.storage
         sessions = s.list_sessions()
-        self._session_data: dict[str, list[tuple[str, str, str]]] = {}
+        self._session_data: dict[str, list[tuple[str, str]]] = {}
+
+        latest_entries: list[tuple[str, str]] = []
+        for name in self._configs:
+            versions = s.list_versions(name)
+            if versions:
+                v = versions[0]
+                latest_entries.append((v.config_name, v.backup_id))
+        if latest_entries:
+            self._session_data["__latest__"] = latest_entries
+            row = self.session_table.rowCount()
+            self.session_table.insertRow(row)
+            item = QTableWidgetItem("📌 最新配置")
+            item.setData(Qt.ItemDataRole.UserRole, "__latest__")
+            self.session_table.setItem(row, 0, item)
+            self.session_table.setItem(row, 1, QTableWidgetItem(f"共 {len(latest_entries)} 个配置的最新版本"))
+            self.session_table.setItem(row, 2, QTableWidgetItem(str(len(latest_entries))))
+
         for sess in sessions:
             for name in sess.config_names:
                 versions = s.list_versions(name)
@@ -292,10 +310,14 @@ class HomeTab(QWidget):
         for config_name, backup_id in entries:
             row = self.detail_table.rowCount()
             self.detail_table.insertRow(row)
-            self.detail_table.setItem(row, 0, QTableWidgetItem(config_name))
-            self.detail_table.setItem(row, 1, QTableWidgetItem(""))
-            self.detail_table.setItem(row, 2, QTableWidgetItem(""))
-            self.detail_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, backup_id)
+            cb = QTableWidgetItem()
+            cb.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            cb.setCheckState(Qt.CheckState.Checked)
+            self.detail_table.setItem(row, 0, cb)
+            self.detail_table.setItem(row, 1, QTableWidgetItem(config_name))
+            self.detail_table.setItem(row, 2, QTableWidgetItem(backup_id))
+            self.detail_table.setItem(row, 3, QTableWidgetItem(""))
+            self.detail_table.item(row, 1).setData(Qt.ItemDataRole.UserRole, backup_id)
         self._selected_session_id = sid
 
     def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
@@ -361,20 +383,25 @@ class HomeTab(QWidget):
         if self._is_restoring:
             QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
             return
-        rows = self.detail_table.selectedItems()
-        if not rows:
-            QMessageBox.warning(self, "提示", "请在右侧详情表中选择要恢复的配置")
+        items = []
+        for r in range(self.detail_table.rowCount()):
+            cb = self.detail_table.item(r, 0)
+            if cb and cb.checkState() == Qt.CheckState.Checked:
+                config_name = self.detail_table.item(r, 1).text()
+                backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
+                items.append((config_name, backup_id))
+        if not items:
+            QMessageBox.warning(self, "提示", "请先在右侧勾选要恢复的配置")
             return
-        item = rows[0]
-        config_name = self.detail_table.item(item.row(), 0).text()
-        backup_id = self.detail_table.item(item.row(), 0).data(Qt.ItemDataRole.UserRole)
+        names = [n for n, _ in items]
         reply = QMessageBox.question(
             self, "确认恢复",
-            f"确定要将 {config_name} 恢复到选中版本吗？",
+            f"将依次恢复以下 {len(names)} 个配置：\n" + "\n".join(f"  • {n}" for n in names),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._restore_single(config_name, backup_id)
+            self._restore_session_queue = items
+            QTimer.singleShot(0, self._restore_next_in_session)
 
     def _restore_session(self):
         if self._is_restoring:
@@ -383,19 +410,23 @@ class HomeTab(QWidget):
         if not hasattr(self, '_selected_session_id') or not self._selected_session_id:
             QMessageBox.warning(self, "提示", "请先在左侧选择一个备份记录")
             return
-        entries = self._session_data.get(self._selected_session_id, [])
-        if not entries:
+        items = []
+        for r in range(self.detail_table.rowCount()):
+            config_name = self.detail_table.item(r, 1).text()
+            backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
+            items.append((config_name, backup_id))
+        if not items:
             QMessageBox.information(self, "提示", "该备份记录无可恢复的版本")
             return
-        names = [e[0] for e in entries]
+        names = [n for n, _ in items]
         reply = QMessageBox.question(
             self, "确认恢复批次",
             f"将依次恢复以下 {len(names)} 个配置：\n" + "\n".join(f"  • {n}" for n in names),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._restore_session_queue = list(entries)
-            self._restore_next_in_session()
+            self._restore_session_queue = items
+            QTimer.singleShot(0, self._restore_next_in_session)
 
     def _restore_next_in_session(self):
         if not self._restore_session_queue:
