@@ -1,0 +1,17 @@
+{
+  "name": "PowerShell",
+  "description": "PowerShell 配置文件及控制台设置",
+  "version": 1,
+  "enabled": true,
+  "platform": "windows",
+  "paths": [
+    "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1",
+    "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShellISE_profile.ps1"
+  ],
+  "parser_fields": {},
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": []
+  }
+}

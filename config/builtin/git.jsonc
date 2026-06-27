@@ -1,0 +1,22 @@
+{
+  "name": "Git",
+  "description": "Git 全局配置",
+  "version": 1,
+  "enabled": true,
+  "platform": "cross-platform",
+  "paths": [
+    "%USERPROFILE%\\.gitconfig",
+    "%USERPROFILE%\\.gitignore_global"
+  ],
+  "parser_fields": {
+    "user.name": "用户名",
+    "user.email": "邮箱",
+    "core.editor": "编辑器",
+    "init.defaultBranch": "默认分支"
+  },
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": []
+  }
+}

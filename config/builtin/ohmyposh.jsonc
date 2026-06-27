@@ -1,0 +1,19 @@
+{
+  "name": "Oh My Posh",
+  "description": "Oh My Posh 终端提示符主题配置",
+  "version": 1,
+  "enabled": true,
+  "platform": "windows",
+  "paths": [
+    "%USERPROFILE%\\.oh-my-posh.omp.json"
+  ],
+  "parser_fields": {
+    "theme": "主题名称",
+    "$schema": "Schema"
+  },
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": []
+  }
+}

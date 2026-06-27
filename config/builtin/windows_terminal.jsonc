@@ -1,0 +1,21 @@
+{
+  "name": "Windows Terminal",
+  "description": "Windows Terminal 终端配置",
+  "version": 1,
+  "enabled": true,
+  "platform": "windows",
+  "paths": [
+    "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json"
+  ],
+  "parser_fields": {
+    "profiles.defaults.font.face": "默认字体",
+    "profiles.defaults.font.size": "字号",
+    "profiles.defaults.opacity": "不透明度",
+    "theme": "主题"
+  },
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": []
+  }
+}

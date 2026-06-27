@@ -1,0 +1,25 @@
+{
+  "name": "VS Code",
+  "description": "Visual Studio Code 编辑器配置",
+  "version": 1,
+  "enabled": true,
+  "platform": "windows",
+  "paths": [
+    "%APPDATA%\\Code\\User\\settings.json",
+    "%APPDATA%\\Code\\User\\keybindings.json",
+    "%APPDATA%\\Code\\User\\snippets\\",
+    "%APPDATA%\\Code\\User\\extensions.json"
+  ],
+  "parser_fields": {
+    "extensions.theme": "主题",
+    "editor.fontSize": "字号",
+    "editor.fontFamily": "字体",
+    "files.autoSave": "自动保存",
+    "workbench.colorTheme": "颜色主题"
+  },
+  "strategy": {
+    "type": "incremental",
+    "max_versions": 10,
+    "ignore_patterns": ["*.log", "*.tmp"]
+  }
+}
