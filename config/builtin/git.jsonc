@@ -8,12 +8,7 @@
     "%USERPROFILE%\\.gitconfig",
     "%USERPROFILE%\\.gitignore_global"
   ],
-  "parser_fields": {
-    "user.name": "用户名",
-    "user.email": "邮箱",
-    "core.editor": "编辑器",
-    "init.defaultBranch": "默认分支"
-  },
+  "parser_fields": {},
   "strategy": {
     "type": "incremental",
     "max_versions": 10,

@@ -5,8 +5,7 @@
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%APPDATA%\\Everything\\Everything.ini",
-    "%APPDATA%\\Everything\\Run History.csv"
+    "%APPDATA%\\Everything\\Everything.ini"
   ],
   "parser_fields": {},
   "strategy": {
