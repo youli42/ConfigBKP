@@ -125,7 +125,18 @@ class HomeTab(QWidget):
         self.detail_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.restore_session_btn = QPushButton("恢复此批次")
         self.restore_session_btn.setStyleSheet("background-color: #FF5722; color: white; padding: 6px 16px;")
+
+        check_btn_layout = QHBoxLayout()
+        self.select_all_detail_btn = QPushButton("全选")
+        self.deselect_all_detail_btn = QPushButton("取消全选")
+        self.invert_detail_btn = QPushButton("反选")
+        check_btn_layout.addWidget(self.select_all_detail_btn)
+        check_btn_layout.addWidget(self.deselect_all_detail_btn)
+        check_btn_layout.addWidget(self.invert_detail_btn)
+        check_btn_layout.addStretch()
+
         detail_layout.addWidget(self.detail_table)
+        detail_layout.addLayout(check_btn_layout)
         detail_layout.addWidget(self.restore_session_btn)
 
         history_splitter.addWidget(self.session_table)
@@ -143,6 +154,9 @@ class HomeTab(QWidget):
         self.restore_btn.clicked.connect(self._restore_selected)
         self.target_browse_btn.clicked.connect(self._browse_target)
         self.restore_session_btn.clicked.connect(self._restore_session)
+        self.select_all_detail_btn.clicked.connect(self._select_all_detail)
+        self.deselect_all_detail_btn.clicked.connect(self._deselect_all_detail)
+        self.invert_detail_btn.clicked.connect(self._invert_detail)
 
         self.refresh_configs()
 
@@ -319,6 +333,25 @@ class HomeTab(QWidget):
             self.detail_table.setItem(row, 3, QTableWidgetItem(""))
             self.detail_table.item(row, 1).setData(Qt.ItemDataRole.UserRole, backup_id)
         self._selected_session_id = sid
+
+    def _select_all_detail(self):
+        for r in range(self.detail_table.rowCount()):
+            cb = self.detail_table.item(r, 0)
+            if cb:
+                cb.setCheckState(Qt.CheckState.Checked)
+
+    def _deselect_all_detail(self):
+        for r in range(self.detail_table.rowCount()):
+            cb = self.detail_table.item(r, 0)
+            if cb:
+                cb.setCheckState(Qt.CheckState.Unchecked)
+
+    def _invert_detail(self):
+        for r in range(self.detail_table.rowCount()):
+            cb = self.detail_table.item(r, 0)
+            if cb:
+                state = cb.checkState()
+                cb.setCheckState(Qt.CheckState.Unchecked if state == Qt.CheckState.Checked else Qt.CheckState.Checked)
 
     def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
         self.backup_btn.setEnabled(True)
