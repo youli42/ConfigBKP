@@ -162,7 +162,7 @@ class ConfigTab(QWidget):
                 self.editor.setPlainText(content)
                 cfg = json5.loads(content)
                 self.wizard.load_rule(cfg)
-                self._editor_tabs.setCurrentIndex(0)
+                self._editor_tabs.setCurrentIndex(1)
             except Exception as e:
                 self.editor.clear()
                 self.validation_label.setText(f"读取失败: {e}")

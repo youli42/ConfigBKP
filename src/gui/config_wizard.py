@@ -99,12 +99,17 @@ class ConfigWizard(QWidget):
 
         step_group = QGroupBox("步骤")
         step_layout = QVBoxLayout(step_group)
-        self._step_labels = []
+        self._step_btns = []
         step_names = ["基本信息", "源路径", "解析字段", "备份策略"]
-        for s in step_names:
-            lb = QLabel(f"  ○ {s}")
-            self._step_labels.append(lb)
-            step_layout.addWidget(lb)
+        for i, s in enumerate(step_names):
+            btn = QPushButton(f"  ○ {s}")
+            btn.setFlat(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("QPushButton { text-align: left; padding: 4px 8px; border: none; } "
+                              "QPushButton:hover { background-color: #e0e0e0; }")
+            btn.clicked.connect(lambda checked, idx=i: self._jump_to(idx))
+            self._step_btns.append(btn)
+            step_layout.addWidget(btn)
         step_layout.addStretch()
         main_split.addWidget(step_group)
 
@@ -165,15 +170,18 @@ class ConfigWizard(QWidget):
         layout.addWidget(self.wiz_paths_list)
         btn_row = QHBoxLayout()
         self.wiz_path_add_btn = QPushButton("添加路径")
-        self.wiz_path_browse_btn = QPushButton("浏览目录...")
+        self.wiz_path_browse_dir_btn = QPushButton("浏览目录...")
+        self.wiz_path_browse_file_btn = QPushButton("浏览文件...")
         self.wiz_path_del_btn = QPushButton("删除路径")
         btn_row.addWidget(self.wiz_path_add_btn)
-        btn_row.addWidget(self.wiz_path_browse_btn)
+        btn_row.addWidget(self.wiz_path_browse_dir_btn)
+        btn_row.addWidget(self.wiz_path_browse_file_btn)
         btn_row.addWidget(self.wiz_path_del_btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)
         self.wiz_path_add_btn.clicked.connect(self._add_path)
-        self.wiz_path_browse_btn.clicked.connect(self._browse_path)
+        self.wiz_path_browse_dir_btn.clicked.connect(self._browse_dir)
+        self.wiz_path_browse_file_btn.clicked.connect(self._browse_file)
         self.wiz_path_del_btn.clicked.connect(self._del_path)
 
     def _add_path(self):
@@ -181,10 +189,15 @@ class ConfigWizard(QWidget):
         if ok and text.strip():
             self.wiz_paths_list.addItem(text.strip())
 
-    def _browse_path(self):
+    def _browse_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "选择配置文件目录")
         if folder:
             self.wiz_paths_list.addItem(str(Path(folder)))
+
+    def _browse_file(self):
+        f = QFileDialog.getOpenFileName(self, "选择配置文件")
+        if f and f[0]:
+            self.wiz_paths_list.addItem(f[0])
 
     def _del_path(self):
         row = self.wiz_paths_list.currentRow()
@@ -260,12 +273,17 @@ class ConfigWizard(QWidget):
 
     # ── 导航 ──
     def _update_step(self, idx: int):
-        for i, lb in enumerate(self._step_labels):
-            lb.setText(f"  {'●' if i == idx else '○'} {lb.text().strip()[2:]}")
+        for i, btn in enumerate(self._step_btns):
+            text = btn.text().strip()
+            btn.setText(f"  {'●' if i == idx else '○'} {text[2:]}")
         self._stack.setCurrentIndex(idx)
         self.prev_btn.setEnabled(idx > 0)
         self.next_btn.setVisible(idx < 3)
         self.finish_btn.setVisible(idx == 3)
+
+    def _jump_to(self, idx: int):
+        self._collect_current()
+        self._update_step(idx)
 
     def _prev(self):
         if self._stack.currentIndex() > 0:
