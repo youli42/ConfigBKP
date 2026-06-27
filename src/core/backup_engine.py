@@ -132,7 +132,7 @@ class BatchBackupWorker(QRunnable):
         self._config_index: dict[str, dict] = {}
 
     def run(self):
-        session_id = "session_" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        session_id = "session_" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
         summary = BackupSummary(session_id=session_id)
         total = len(self.items)
         logger.debug("批量备份开始，共 %d 个配置, session=%s", total, session_id)

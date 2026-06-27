@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
-from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession
+from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession, \
+    build_sessions_from_meta
 
 
 def _read_meta(meta_path: Path) -> dict:
@@ -67,9 +68,9 @@ class LocalStorage(StorageBackend):
         return versions
 
     def list_sessions(self) -> list[BackupSession]:
-        session_map: dict[str, dict] = {}
         if not self.base_dir.exists():
             return []
+        metas = []
         for cfg_entry in sorted(self.base_dir.iterdir()):
             if not cfg_entry.is_dir():
                 continue
@@ -79,26 +80,9 @@ class LocalStorage(StorageBackend):
                 if not meta_path.exists():
                     continue
                 meta = _read_meta(meta_path)
-                sid = meta.get("session_id", meta["backup_id"])
-                if sid not in session_map:
-                    session_map[sid] = {
-                        "session_id": sid,
-                        "timestamp": meta["timestamp"],
-                        "note": meta.get("note", ""),
-                        "config_names": [],
-                    }
-                cfg_name = meta.get("config_name", config_name)
-                if cfg_name not in session_map[sid]["config_names"]:
-                    session_map[sid]["config_names"].append(cfg_name)
-        sessions = []
-        for s in sorted(session_map.values(), key=lambda x: x["timestamp"], reverse=True):
-            sessions.append(BackupSession(
-                session_id=s["session_id"],
-                timestamp=s["timestamp"],
-                note=s["note"],
-                config_names=s["config_names"],
-            ))
-        return sessions
+                meta.setdefault("config_name", config_name)
+                metas.append(meta)
+        return build_sessions_from_meta(metas)
 
     def restore(self, config_name: str, backup_id: str, target_dir: Optional[Path] = None) -> RestoreResult:
         ver_dir = self._version_dir(config_name, backup_id)

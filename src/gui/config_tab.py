@@ -58,6 +58,7 @@ class ConfigTab(QWidget):
         editor_layout.addLayout(bottom_bar)
 
         splitter.addWidget(editor_widget)
+        editor_widget.setMinimumWidth(300)
         splitter.setSizes([200, 500])
         layout.addWidget(splitter)
 

@@ -26,6 +26,7 @@ class HomeTab(QWidget):
         self._checkboxes: dict[str, QCheckBox] = {}
         self._backup_signals: BatchBackupSignals | None = None
         self._restore_signals: RestoreSignals | None = None
+        self._is_restoring = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -179,13 +180,15 @@ class HomeTab(QWidget):
         self.detail_table.setRowCount(0)
         s = storage or self.storage
         sessions = s.list_sessions()
-        self._session_data: dict[str, list] = {}
+        self._session_data: dict[str, list[tuple[str, str, str]]] = {}
         for sess in sessions:
             for name in sess.config_names:
                 versions = s.list_versions(name)
                 for v in versions:
                     if v.session_id == sess.session_id:
-                        self._session_data.setdefault(sess.session_id, []).append(v)
+                        self._session_data.setdefault(sess.session_id, []).append(
+                            (v.config_name, v.backup_id, v.description[:60] if v.description else "")
+                        )
             row = self.session_table.rowCount()
             self.session_table.insertRow(row)
             self.session_table.setItem(row, 0, QTableWidgetItem(sess.timestamp.replace("T", " ")[:19]))
@@ -285,14 +288,14 @@ class HomeTab(QWidget):
         if not rows:
             return
         sid = self.session_table.item(rows[0].row(), 0).data(Qt.ItemDataRole.UserRole)
-        versions = self._session_data.get(sid, [])
-        for v in versions:
+        entries = self._session_data.get(sid, [])
+        for config_name, backup_id, desc in entries:
             row = self.detail_table.rowCount()
             self.detail_table.insertRow(row)
-            self.detail_table.setItem(row, 0, QTableWidgetItem(v.config_name))
+            self.detail_table.setItem(row, 0, QTableWidgetItem(config_name))
             self.detail_table.setItem(row, 1, QTableWidgetItem(""))
-            self.detail_table.setItem(row, 2, QTableWidgetItem(v.description[:60] if v.description else ""))
-            self.detail_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, v.backup_id)
+            self.detail_table.setItem(row, 2, QTableWidgetItem(desc))
+            self.detail_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, backup_id)
         self._selected_session_id = sid
 
     def _batch_backup_done(self, storage: StorageBackend, summary: BackupSummary):
@@ -334,10 +337,14 @@ class HomeTab(QWidget):
         QMessageBox.critical(self, "备份失败", msg)
 
     def _restore_single(self, config_name: str, backup_id: str):
+        if self._is_restoring:
+            QMessageBox.warning(self, "提示", "正在执行恢复操作，请等待完成")
+            return
         cfg = self._configs.get(config_name)
         if not cfg:
             QMessageBox.critical(self, "错误", f"未找到配置规则: {config_name}")
             return
+        self._is_restoring = True
         self.backup_btn.setEnabled(False)
         self.restore_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -370,48 +377,55 @@ class HomeTab(QWidget):
         if not hasattr(self, '_selected_session_id') or not self._selected_session_id:
             QMessageBox.warning(self, "提示", "请先在左侧选择一个备份记录")
             return
-        versions = self._session_data.get(self._selected_session_id, [])
-        if not versions:
+        entries = self._session_data.get(self._selected_session_id, [])
+        if not entries:
             QMessageBox.information(self, "提示", "该备份记录无可恢复的版本")
             return
-        names = [v.config_name for v in versions]
+        names = [e[0] for e in entries]
         reply = QMessageBox.question(
             self, "确认恢复批次",
             f"将依次恢复以下 {len(names)} 个配置：\n" + "\n".join(f"  • {n}" for n in names),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._restore_session_queue = list(versions)
+            self._restore_session_queue = list(entries)
             self._restore_next_in_session()
 
     def _restore_next_in_session(self):
         if not self._restore_session_queue:
+            self._is_restoring = False
+            self._restore_session_queue = []
             self.status_label.setText("批次恢复完成")
             QMessageBox.information(self, "恢复完成", "批次中所有配置已恢复")
             return
-        v = self._restore_session_queue.pop(0)
-        self._restore_single(v.config_name, v.backup_id)
+        config_name, backup_id, _ = self._restore_session_queue.pop(0)
+        self._restore_single(config_name, backup_id)
 
     def _restore_done(self, result):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._restore_signals = None
+        self._is_restoring = False
         self.status_label.setText(f"已恢复 {result.config_name}")
         if hasattr(self, '_restore_session_queue') and self._restore_session_queue:
             self._restore_next_in_session()
         else:
+            self._restore_session_queue = []
             QMessageBox.information(self, "恢复完成", f"已成功恢复 {result.config_name}")
 
     def _restore_error(self, msg: str):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._restore_signals = None
+        self._is_restoring = False
+        self._restore_session_queue = []
         QMessageBox.critical(self, "恢复失败", msg)
 
     def _handle_blocked(self, msg: str, procs: list[str]):
         self.backup_btn.setEnabled(True)
         self.restore_btn.setEnabled(True)
         self._restore_signals = None
+        self._is_restoring = False
         self._restore_session_queue = []
         proc_text = "\n".join(f"  • {p}" for p in procs)
         QMessageBox.warning(
