@@ -34,16 +34,6 @@ class HomeTab(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
-        top_bar = QHBoxLayout()
-        self.scan_btn = QPushButton("扫描本机已装软件")
-        self.select_all_btn = QPushButton("全选")
-        self.deselect_all_btn = QPushButton("取消全选")
-        top_bar.addWidget(self.scan_btn)
-        top_bar.addWidget(self.select_all_btn)
-        top_bar.addWidget(self.deselect_all_btn)
-        top_bar.addStretch()
-        layout.addLayout(top_bar)
-
         splitter = QSplitter(Qt.Orientation.Vertical)
 
         upper = QWidget()
@@ -52,6 +42,15 @@ class HomeTab(QWidget):
 
         left_group = QGroupBox("配置规则")
         left_layout = QVBoxLayout(left_group)
+        self.scan_btn = QPushButton("扫描本机已装软件")
+        self.select_all_btn = QPushButton("全选")
+        self.deselect_all_btn = QPushButton("取消全选")
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self.scan_btn)
+        btn_row.addWidget(self.select_all_btn)
+        btn_row.addWidget(self.deselect_all_btn)
+        btn_row.addStretch()
+        left_layout.addLayout(btn_row)
         self.config_list = QWidget()
         self.config_list_layout = QVBoxLayout(self.config_list)
         self.config_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -187,10 +186,19 @@ class HomeTab(QWidget):
                 desc = cfg.get("description", "")
                 if desc:
                     cb.setToolTip(desc)
-                self.config_list_layout.addWidget(cb)
 
-        self.config_list_layout.addStretch()
+        self._rebuild_config_list()
         self._refresh_sessions()
+
+    def _rebuild_config_list(self):
+        while self.config_list_layout.count():
+            item = self.config_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        items = sorted(self._checkboxes.items(), key=lambda x: not x[1].isChecked())
+        for name, cb in items:
+            self.config_list_layout.addWidget(cb)
+        self.config_list_layout.addStretch()
 
     def _refresh_sessions(self, storage: Optional[StorageBackend] = None):
         self.session_table.setRowCount(0)
@@ -235,6 +243,7 @@ class HomeTab(QWidget):
         matched = scan_installed([self.config_dir / "builtin", self.config_dir / "user"])
         for name, cb in self._checkboxes.items():
             cb.setChecked(name in matched)
+        self._rebuild_config_list()
         self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
 
     def _select_all(self):
