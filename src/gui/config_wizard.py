@@ -18,8 +18,8 @@ def serialize_to_jsonc(data: dict) -> str:
         "version": 1,
         "enabled": data.get("enabled", True),
         "platform": data.get("platform", "windows"),
-        "paths": list(data.get("paths", [])),
-        "data_paths": list(data.get("data_paths", [])),
+        "paths": dict(data.get("paths", {})),
+        "data_paths": dict(data.get("data_paths", {})),
         "backup_scope": {
             "config": data.get("backup_scope", {}).get("config", True),
             "data": data.get("backup_scope", {}).get("data", False),
@@ -34,14 +34,23 @@ def serialize_to_jsonc(data: dict) -> str:
     return _json.dumps(obj, indent=2, ensure_ascii=False)
 
 
+def _ensure_plat_dict(val, current_plat="windows") -> dict:
+    if isinstance(val, dict):
+        return dict(val)
+    if isinstance(val, list):
+        return {current_plat: list(val)}
+    return {}
+
+
 def parse_to_form_data(cfg: dict) -> dict:
+    current_plat = cfg.get("platform", "windows")
     return {
         "name": cfg.get("name", ""),
         "description": cfg.get("description", ""),
         "enabled": cfg.get("enabled", True),
         "platform": cfg.get("platform", "windows"),
-        "paths": list(cfg.get("paths", [])),
-        "data_paths": list(cfg.get("data_paths", [])),
+        "paths": _ensure_plat_dict(cfg.get("paths", []), current_plat),
+        "data_paths": _ensure_plat_dict(cfg.get("data_paths", []), current_plat),
         "backup_scope": {
             "config": cfg.get("backup_scope", {}).get("config", True),
             "data": cfg.get("backup_scope", {}).get("data", False),
@@ -177,17 +186,27 @@ class ConfigWizard(QWidget):
         self.wiz_scope_data = QCheckBox("备份程序数据")
         layout.addRow("", self.wiz_scope_data)
 
-    # ── Step 1: 路径配置（双列：配置文件路径 + 程序数据路径）──
+    # ── Step 1: 路径配置（按平台切换显示）──
     def _build_page1(self):
         page = self._page_widgets[1]
-        layout = QHBoxLayout(page)
+        layout = QVBoxLayout(page)
 
+        plat_layout = QHBoxLayout()
+        plat_layout.addWidget(QLabel("平台:"))
+        self.wiz_path_plat = QComboBox()
+        self.wiz_path_plat.addItems(["windows", "macos", "linux"])
+        self.wiz_path_plat.currentIndexChanged.connect(self._on_path_plat_changed)
+        plat_layout.addWidget(self.wiz_path_plat)
+        plat_layout.addStretch()
+        layout.addLayout(plat_layout)
+
+        cols = QHBoxLayout()
         left_grp = QGroupBox("配置文件路径")
         left_layout = QVBoxLayout(left_grp)
+        left_grp.setMinimumWidth(200)
         self.wiz_paths_list = QListWidget()
         left_layout.addWidget(self.wiz_paths_list)
         left_btn = QHBoxLayout()
-        left_grp.setMinimumWidth(200)
         self.wiz_path_add_btn = QPushButton("添加路径")
         self.wiz_path_browse_btn = QPushButton("浏览目录...")
         self.wiz_path_browse_file_btn = QPushButton("浏览文件...")
@@ -214,59 +233,43 @@ class ConfigWizard(QWidget):
         right_btn.addWidget(self.wiz_data_del_btn)
         right_layout.addLayout(right_btn)
 
-        layout.addWidget(left_grp)
-        layout.addWidget(right_grp)
+        cols.addWidget(left_grp)
+        cols.addWidget(right_grp)
+        layout.addLayout(cols)
 
-        self.wiz_path_add_btn.clicked.connect(self._add_path)
-        self.wiz_path_browse_btn.clicked.connect(self._browse_path_dir)
-        self.wiz_path_browse_file_btn.clicked.connect(self._browse_path_file)
-        self.wiz_path_del_btn.clicked.connect(self._del_path)
-        self.wiz_data_add_btn.clicked.connect(self._add_data_path)
-        self.wiz_data_browse_btn.clicked.connect(self._browse_data_dir)
-        self.wiz_data_browse_file_btn.clicked.connect(self._browse_data_file)
-        self.wiz_data_del_btn.clicked.connect(self._del_data_path)
+        self.wiz_path_add_btn.clicked.connect(lambda: self._add_path_to(self.wiz_paths_list))
+        self.wiz_path_browse_btn.clicked.connect(lambda: self._browse_dir_to(self.wiz_paths_list, "选择配置文件目录"))
+        self.wiz_path_browse_file_btn.clicked.connect(lambda: self._browse_file_to(self.wiz_paths_list, "选择配置文件"))
+        self.wiz_path_del_btn.clicked.connect(lambda: self._del_selected(self.wiz_paths_list))
+        self.wiz_data_add_btn.clicked.connect(lambda: self._add_path_to(self.wiz_data_list))
+        self.wiz_data_browse_btn.clicked.connect(lambda: self._browse_dir_to(self.wiz_data_list, "选择程序数据目录"))
+        self.wiz_data_browse_file_btn.clicked.connect(lambda: self._browse_file_to(self.wiz_data_list, "选择程序数据文件"))
+        self.wiz_data_del_btn.clicked.connect(lambda: self._del_selected(self.wiz_data_list))
 
-    def _add_path(self):
+    def _on_path_plat_changed(self):
+        self._collect_current()
+        self._sync_path_lists()
+
+    def _add_path_to(self, lst: QListWidget):
         text, ok = QInputDialog.getText(self, "添加路径", "输入文件或目录路径：\n支持 %APPDATA% 等环境变量",
                                         text="%APPDATA%\\")
         if ok and text.strip():
-            self.wiz_paths_list.addItem(text.strip())
+            lst.addItem(text.strip())
 
-    def _browse_path_dir(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择配置文件目录")
+    def _browse_dir_to(self, lst: QListWidget, title: str):
+        folder = QFileDialog.getExistingDirectory(self, title)
         if folder:
-            self.wiz_paths_list.addItem(str(Path(folder)))
+            lst.addItem(str(Path(folder)))
 
-    def _browse_path_file(self):
-        f = QFileDialog.getOpenFileName(self, "选择配置文件")
+    def _browse_file_to(self, lst: QListWidget, title: str):
+        f = QFileDialog.getOpenFileName(self, title)
         if f and f[0]:
-            self.wiz_paths_list.addItem(str(Path(f[0])))
+            lst.addItem(str(Path(f[0])))
 
-    def _del_path(self):
-        row = self.wiz_paths_list.currentRow()
+    def _del_selected(self, lst: QListWidget):
+        row = lst.currentRow()
         if row >= 0:
-            self.wiz_paths_list.takeItem(row)
-
-    def _add_data_path(self):
-        text, ok = QInputDialog.getText(self, "添加数据路径", "输入程序数据目录路径：\n支持 %APPDATA% 等环境变量",
-                                        text="%APPDATA%\\")
-        if ok and text.strip():
-            self.wiz_data_list.addItem(text.strip())
-
-    def _browse_data_dir(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择程序数据目录")
-        if folder:
-            self.wiz_data_list.addItem(str(Path(folder)))
-
-    def _browse_data_file(self):
-        f = QFileDialog.getOpenFileName(self, "选择程序数据文件")
-        if f and f[0]:
-            self.wiz_data_list.addItem(str(Path(f[0])))
-
-    def _del_data_path(self):
-        row = self.wiz_data_list.currentRow()
-        if row >= 0:
-            self.wiz_data_list.takeItem(row)
+            lst.takeItem(row)
 
     # ── Step 2: 解析字段 ──
     def _build_page2(self):
@@ -372,14 +375,15 @@ class ConfigWizard(QWidget):
                 "data": self.wiz_scope_data.isChecked(),
             }
         elif idx == 1:
+            plat = self.wiz_path_plat.currentText()
             paths = []
             for i in range(self.wiz_paths_list.count()):
                 paths.append(self.wiz_paths_list.item(i).text())
-            self._data["paths"] = paths
+            self._data["paths"][plat] = paths
             data_paths = []
             for i in range(self.wiz_data_list.count()):
                 data_paths.append(self.wiz_data_list.item(i).text())
-            self._data["data_paths"] = data_paths
+            self._data["data_paths"][plat] = data_paths
         elif idx == 2:
             fields = {}
             for r in range(self.wiz_fields_table.rowCount()):
@@ -400,7 +404,8 @@ class ConfigWizard(QWidget):
         self._collect_current()
         if not self._data.get("name"):
             QMessageBox.warning(self, "提示", "名称不能为空")
-            self._update_step(0 if not self._data.get("data_paths") else 1)
+            has_dp = any(self._data.get("data_paths", {}).get(p, []) for p in ("windows", "macos", "linux"))
+            self._update_step(0 if not has_dp else 1)
             return
         jsonc = serialize_to_jsonc(self._data)
         self._on_finish(jsonc)
@@ -424,9 +429,7 @@ class ConfigWizard(QWidget):
             self.wiz_platform.setCurrentIndex(idx)
         self.wiz_enabled.setChecked(self._data.get("enabled", True))
 
-        self.wiz_paths_list.clear()
-        for p in self._data.get("paths", []):
-            self.wiz_paths_list.addItem(p)
+        self._sync_path_lists()
 
         self.wiz_fields_table.setRowCount(0)
         for k, v in self._data.get("parser_fields", {}).items():
@@ -448,14 +451,21 @@ class ConfigWizard(QWidget):
         scope = self._data.get("backup_scope", {})
         self.wiz_scope_config.setChecked(scope.get("config", True))
         self.wiz_scope_data.setChecked(scope.get("data", False))
-        self.wiz_data_list.clear()
-        for p in self._data.get("data_paths", []):
-            self.wiz_data_list.addItem(p)
 
-        if self._data.get("data_paths") or self._data.get("backup_scope", {}).get("data", False):
+        any_data = any(self._data.get("data_paths", {}).get(p, []) for p in ("windows", "macos", "linux"))
+        if any_data or self._data.get("backup_scope", {}).get("data", False):
             self._update_step(1)
         else:
             self._update_step(0)
+
+    def _sync_path_lists(self):
+        plat = self.wiz_path_plat.currentText()
+        self.wiz_paths_list.clear()
+        for p in self._data.get("paths", {}).get(plat, []):
+            self.wiz_paths_list.addItem(p)
+        self.wiz_data_list.clear()
+        for p in self._data.get("data_paths", {}).get(plat, []):
+            self.wiz_data_list.addItem(p)
 
     def get_jsonc(self) -> str:
         self._collect_current()
