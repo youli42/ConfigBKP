@@ -429,6 +429,11 @@ class ConfigWizard(QWidget):
             self.wiz_platform.setCurrentIndex(idx)
         self.wiz_enabled.setChecked(self._data.get("enabled", True))
 
+        self.wiz_path_plat.blockSignals(True)
+        pidx = self.wiz_path_plat.findText(plat)
+        if pidx >= 0:
+            self.wiz_path_plat.setCurrentIndex(pidx)
+        self.wiz_path_plat.blockSignals(False)
         self._sync_path_lists()
 
         self.wiz_fields_table.setRowCount(0)
