@@ -55,16 +55,24 @@ class RestoreWorker(QRunnable):
             locked_files: list[Path] = []
             original_paths: dict[str, Path] = {}
             cfg_paths = self.config.get("paths", [])
+            cfg_data_paths = self.config.get("data_paths", [])
+
+            meta = self.storage.read_meta(config_name, self.backup_id)
+            source_types: dict[str, str] = meta.get("source_types", {})
 
             from src.utils.path_expander import expand
             for rel_path in backup_files:
-                for cfg_path_str in cfg_paths:
+                st = source_types.get(rel_path, "config")
+                candidates = cfg_data_paths if st == "data" else cfg_paths
+                matched = False
+                for cfg_path_str in candidates:
                     cfg_path = expand(cfg_path_str)
                     if cfg_path.name == Path(rel_path).name or str(Path(rel_path).parent) == "":
                         dst = cfg_path if not self.restore_dir else self.restore_dir / rel_path
                         original_paths[rel_path] = dst
+                        matched = True
                         break
-                else:
+                if not matched:
                     if self.restore_dir:
                         original_paths[rel_path] = self.restore_dir / rel_path
                     else:

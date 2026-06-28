@@ -14,6 +14,14 @@
   "strategy": {
     "type": "incremental",
     "max_versions": 10,
-    "ignore_patterns": ["*.log", "*.tmp"]
+    "ignore_patterns": [
+      "*.log",
+      "*.tmp"
+    ]
+  },
+  "data_paths": [],
+  "backup_scope": {
+    "config": true,
+    "data": false
   }
 }

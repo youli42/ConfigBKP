@@ -43,7 +43,7 @@ class ZipStorage(StorageBackend):
         return self._temp_dir
 
     def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
-             session_id: str = "") -> BackupResult:
+             session_id: str = "", source_types: Optional[dict[str, str]] = None) -> BackupResult:
         zip_path = self._zip_path(config_name, backup_id)
         zip_path.parent.mkdir(parents=True, exist_ok=True)
         total_size = 0
@@ -58,6 +58,7 @@ class ZipStorage(StorageBackend):
                 "note": note,
                 "description": description,
                 "session_id": session_id,
+                "source_types": source_types if source_types else {},
             }
             zf.writestr(".metadata.json", json.dumps(metadata, indent=2, ensure_ascii=False))
         return BackupResult(backup_id, config_name, len(files), total_size, note, session_id)
@@ -132,6 +133,12 @@ class ZipStorage(StorageBackend):
                 rel = str(item.relative_to(extract_dir))
                 files[rel] = item
         return files
+
+    def read_meta(self, config_name: str, backup_id: str) -> dict:
+        zip_path = self._zip_path(config_name, backup_id)
+        if zip_path.exists():
+            return _read_meta_from_zip(zip_path)
+        return {}
 
     def delete_version(self, config_name: str, backup_id: str) -> bool:
         zip_path = self._zip_path(config_name, backup_id)

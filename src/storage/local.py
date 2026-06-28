@@ -30,7 +30,7 @@ class LocalStorage(StorageBackend):
         return self._version_dir(config_name, backup_id) / ".metadata.json"
 
     def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
-             session_id: str = "") -> BackupResult:
+             session_id: str = "", source_types: Optional[dict[str, str]] = None) -> BackupResult:
         ver_dir = self._version_dir(config_name, backup_id)
         ver_dir.mkdir(parents=True, exist_ok=True)
         total_size = 0
@@ -46,6 +46,7 @@ class LocalStorage(StorageBackend):
             "note": note,
             "description": description,
             "session_id": session_id,
+            "source_types": source_types if source_types else {},
         }
         with open(self._meta_path(config_name, backup_id), "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -119,6 +120,12 @@ class LocalStorage(StorageBackend):
                 rel = item.relative_to(ver_dir)
                 files[str(rel)] = item
         return files
+
+    def read_meta(self, config_name: str, backup_id: str) -> dict:
+        meta_path = self._meta_path(config_name, backup_id)
+        if meta_path.exists():
+            return _read_meta(meta_path)
+        return {}
 
     def delete_version(self, config_name: str, backup_id: str) -> bool:
         ver_dir = self._version_dir(config_name, backup_id)

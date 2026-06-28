@@ -52,7 +52,7 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
-             session_id: str = "") -> BackupResult:
+             session_id: str = "", source_types: Optional[dict[str, str]] = None) -> BackupResult:
         ...
 
     @abstractmethod
@@ -69,6 +69,10 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def get_files(self, config_name: str, backup_id: str) -> dict[str, Path]:
+        ...
+
+    @abstractmethod
+    def read_meta(self, config_name: str, backup_id: str) -> dict:
         ...
 
     @abstractmethod

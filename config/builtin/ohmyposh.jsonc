@@ -15,5 +15,10 @@
     "type": "incremental",
     "max_versions": 10,
     "ignore_patterns": []
+  },
+  "data_paths": [],
+  "backup_scope": {
+    "config": true,
+    "data": false
   }
 }

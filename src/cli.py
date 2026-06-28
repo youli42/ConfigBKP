@@ -29,10 +29,27 @@ def run_silent_backup():
                 continue
             if not cfg.get("enabled", True):
                 continue
-            files = collect_files(cfg.get("paths", []))
+            files: dict[str, Path] = {}
+            file_sources: dict[str, str] = {}
+            scope = cfg.get("backup_scope", {"config": True, "data": False})
             patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
-            files = filter_ignored(files, patterns)
-            items.append((cfg, files))
+
+            if scope.get("config", True):
+                cf = collect_files(cfg.get("paths", []))
+                cf = filter_ignored(cf, patterns)
+                for k, v in cf.items():
+                    files[k] = v
+                    file_sources[k] = "config"
+
+            if scope.get("data", False):
+                df = collect_files(cfg.get("data_paths", []))
+                df = filter_ignored(df, patterns)
+                for k, v in df.items():
+                    files[k] = v
+                    if k not in file_sources:
+                        file_sources[k] = "data"
+
+            items.append((cfg, files, file_sources))
 
     app = QCoreApplication(sys.argv)
     signals = BatchBackupSignals()

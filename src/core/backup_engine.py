@@ -120,7 +120,7 @@ class BatchBackupSignals(QObject):
 
 
 class BatchBackupWorker(QRunnable):
-    def __init__(self, items: list[tuple[dict, dict[str, Path]]],
+    def __init__(self, items: list[tuple[dict, dict[str, Path], dict[str, str]]],
                  storage: StorageBackend, manifest_base_dir: Path,
                  note: str, signals: BatchBackupSignals):
         super().__init__()
@@ -136,7 +136,7 @@ class BatchBackupWorker(QRunnable):
         summary = BackupSummary(session_id=session_id)
         total = len(self.items)
         logger.debug("批量备份开始，共 %d 个配置, session=%s", total, session_id)
-        for idx, (cfg, files) in enumerate(self.items):
+        for idx, (cfg, files, file_sources) in enumerate(self.items):
             name = cfg["name"]
             self._config_index[name] = cfg
             self.signals.message.emit(f"[{idx+1}/{total}] 正在处理 {name}...")
@@ -163,7 +163,7 @@ class BatchBackupWorker(QRunnable):
                 result = self.storage.save(
                     backup_id=backup_id, config_name=name,
                     files=changed_files, note=self.note, description=description,
-                    session_id=session_id,
+                    session_id=session_id, source_types=file_sources,
                 )
                 manifest_mgr.update_manifest(changed_files, backup_id)
                 self._prune_versions(name)
