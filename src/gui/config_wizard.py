@@ -110,7 +110,7 @@ class ConfigWizard(QWidget):
         step_group = QGroupBox("步骤")
         step_layout = QVBoxLayout(step_group)
         self._step_btns = []
-        step_names = ["基本信息", "源路径", "解析字段", "备份策略", "数据路径"]
+        step_names = ["基本信息", "路径配置", "解析字段", "备份策略"]
         for i, s in enumerate(step_names):
             btn = QPushButton(f"  ○ {s}")
             btn.setFlat(True)
@@ -125,7 +125,7 @@ class ConfigWizard(QWidget):
 
         self._stack = QStackedWidget()
         self._page_widgets = []
-        for i in range(5):
+        for i in range(4):
             page = QWidget()
             self._stack.addWidget(page)
             self._page_widgets.append(page)
@@ -134,7 +134,6 @@ class ConfigWizard(QWidget):
         self._build_page1()
         self._build_page2()
         self._build_page3()
-        self._build_page4()
 
         main_split.addWidget(self._stack, 1)
         layout.addLayout(main_split)
@@ -172,40 +171,73 @@ class ConfigWizard(QWidget):
         self.wiz_enabled = QCheckBox("启用")
         self.wiz_enabled.setChecked(True)
         layout.addRow("", self.wiz_enabled)
+        self.wiz_scope_config = QCheckBox("备份配置文件")
+        self.wiz_scope_config.setChecked(True)
+        layout.addRow("", self.wiz_scope_config)
+        self.wiz_scope_data = QCheckBox("备份程序数据")
+        layout.addRow("", self.wiz_scope_data)
 
-    # ── Step 1: 源路径 ──
+    # ── Step 1: 路径配置（双列：配置文件路径 + 程序数据路径）──
     def _build_page1(self):
         page = self._page_widgets[1]
-        layout = QVBoxLayout(page)
+        layout = QHBoxLayout(page)
+
+        left_grp = QGroupBox("配置文件路径")
+        left_layout = QVBoxLayout(left_grp)
         self.wiz_paths_list = QListWidget()
-        layout.addWidget(self.wiz_paths_list)
-        btn_row = QHBoxLayout()
+        left_layout.addWidget(self.wiz_paths_list)
+        left_btn = QHBoxLayout()
+        left_grp.setMinimumWidth(200)
         self.wiz_path_add_btn = QPushButton("添加路径")
-        self.wiz_path_browse_dir_btn = QPushButton("浏览目录...")
+        self.wiz_path_browse_btn = QPushButton("浏览目录...")
         self.wiz_path_browse_file_btn = QPushButton("浏览文件...")
-        self.wiz_path_del_btn = QPushButton("删除路径")
-        btn_row.addWidget(self.wiz_path_add_btn)
-        btn_row.addWidget(self.wiz_path_browse_dir_btn)
-        btn_row.addWidget(self.wiz_path_browse_file_btn)
-        btn_row.addWidget(self.wiz_path_del_btn)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
+        self.wiz_path_del_btn = QPushButton("删除")
+        left_btn.addWidget(self.wiz_path_add_btn)
+        left_btn.addWidget(self.wiz_path_browse_btn)
+        left_btn.addWidget(self.wiz_path_browse_file_btn)
+        left_btn.addWidget(self.wiz_path_del_btn)
+        left_layout.addLayout(left_btn)
+
+        right_grp = QGroupBox("程序数据路径")
+        right_grp.setMinimumWidth(200)
+        right_layout = QVBoxLayout(right_grp)
+        self.wiz_data_list = QListWidget()
+        right_layout.addWidget(self.wiz_data_list)
+        right_btn = QHBoxLayout()
+        self.wiz_data_add_btn = QPushButton("添加路径")
+        self.wiz_data_browse_btn = QPushButton("浏览目录...")
+        self.wiz_data_browse_file_btn = QPushButton("浏览文件...")
+        self.wiz_data_del_btn = QPushButton("删除")
+        right_btn.addWidget(self.wiz_data_add_btn)
+        right_btn.addWidget(self.wiz_data_browse_btn)
+        right_btn.addWidget(self.wiz_data_browse_file_btn)
+        right_btn.addWidget(self.wiz_data_del_btn)
+        right_layout.addLayout(right_btn)
+
+        layout.addWidget(left_grp)
+        layout.addWidget(right_grp)
+
         self.wiz_path_add_btn.clicked.connect(self._add_path)
-        self.wiz_path_browse_dir_btn.clicked.connect(self._browse_dir)
-        self.wiz_path_browse_file_btn.clicked.connect(self._browse_file)
+        self.wiz_path_browse_btn.clicked.connect(self._browse_path_dir)
+        self.wiz_path_browse_file_btn.clicked.connect(self._browse_path_file)
         self.wiz_path_del_btn.clicked.connect(self._del_path)
+        self.wiz_data_add_btn.clicked.connect(self._add_data_path)
+        self.wiz_data_browse_btn.clicked.connect(self._browse_data_dir)
+        self.wiz_data_browse_file_btn.clicked.connect(self._browse_data_file)
+        self.wiz_data_del_btn.clicked.connect(self._del_data_path)
 
     def _add_path(self):
-        text, ok = QInputDialog.getText(self, "添加路径", "输入文件或目录路径：\n支持 %APPDATA% 等环境变量", text="%APPDATA%\\")
+        text, ok = QInputDialog.getText(self, "添加路径", "输入文件或目录路径：\n支持 %APPDATA% 等环境变量",
+                                        text="%APPDATA%\\")
         if ok and text.strip():
             self.wiz_paths_list.addItem(text.strip())
 
-    def _browse_dir(self):
+    def _browse_path_dir(self):
         folder = QFileDialog.getExistingDirectory(self, "选择配置文件目录")
         if folder:
             self.wiz_paths_list.addItem(str(Path(folder)))
 
-    def _browse_file(self):
+    def _browse_path_file(self):
         f = QFileDialog.getOpenFileName(self, "选择配置文件")
         if f and f[0]:
             self.wiz_paths_list.addItem(str(Path(f[0])))
@@ -214,6 +246,27 @@ class ConfigWizard(QWidget):
         row = self.wiz_paths_list.currentRow()
         if row >= 0:
             self.wiz_paths_list.takeItem(row)
+
+    def _add_data_path(self):
+        text, ok = QInputDialog.getText(self, "添加数据路径", "输入程序数据目录路径：\n支持 %APPDATA% 等环境变量",
+                                        text="%APPDATA%\\")
+        if ok and text.strip():
+            self.wiz_data_list.addItem(text.strip())
+
+    def _browse_data_dir(self):
+        folder = QFileDialog.getExistingDirectory(self, "选择程序数据目录")
+        if folder:
+            self.wiz_data_list.addItem(str(Path(folder)))
+
+    def _browse_data_file(self):
+        f = QFileDialog.getOpenFileName(self, "选择程序数据文件")
+        if f and f[0]:
+            self.wiz_data_list.addItem(str(Path(f[0])))
+
+    def _del_data_path(self):
+        row = self.wiz_data_list.currentRow()
+        if row >= 0:
+            self.wiz_data_list.takeItem(row)
 
     # ── Step 2: 解析字段 ──
     def _build_page2(self):
@@ -282,54 +335,6 @@ class ConfigWizard(QWidget):
         if row >= 0:
             self.wiz_ignore_list.takeItem(row)
 
-    # ── Step 4: 数据路径与备份范围 ──
-    def _build_page4(self):
-        page = self._page_widgets[4]
-        layout = QVBoxLayout(page)
-
-        scope_group = QGroupBox("备份范围")
-        scope_layout = QFormLayout(scope_group)
-        self.wiz_scope_config = QCheckBox("备份配置文件")
-        self.wiz_scope_config.setChecked(True)
-        scope_layout.addRow(self.wiz_scope_config)
-        self.wiz_scope_data = QCheckBox("备份程序数据")
-        scope_layout.addRow(self.wiz_scope_data)
-        layout.addWidget(scope_group)
-
-        data_grp = QGroupBox("数据目录路径")
-        data_layout = QVBoxLayout(data_grp)
-        self.wiz_data_list = QListWidget()
-        data_layout.addWidget(self.wiz_data_list)
-        btn_row = QHBoxLayout()
-        self.wiz_data_add_btn = QPushButton("添加路径")
-        self.wiz_data_browse_btn = QPushButton("浏览目录...")
-        self.wiz_data_del_btn = QPushButton("删除路径")
-        btn_row.addWidget(self.wiz_data_add_btn)
-        btn_row.addWidget(self.wiz_data_browse_btn)
-        btn_row.addWidget(self.wiz_data_del_btn)
-        btn_row.addStretch()
-        data_layout.addLayout(btn_row)
-        layout.addWidget(data_grp)
-
-        self.wiz_data_add_btn.clicked.connect(self._add_data_path)
-        self.wiz_data_browse_btn.clicked.connect(self._browse_data_dir)
-        self.wiz_data_del_btn.clicked.connect(self._del_data_path)
-
-    def _add_data_path(self):
-        text, ok = QInputDialog.getText(self, "添加数据路径", "输入程序数据目录路径：\n支持 %APPDATA% 等环境变量", text="%APPDATA%\\")
-        if ok and text.strip():
-            self.wiz_data_list.addItem(text.strip())
-
-    def _browse_data_dir(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择程序数据目录")
-        if folder:
-            self.wiz_data_list.addItem(str(Path(folder)))
-
-    def _del_data_path(self):
-        row = self.wiz_data_list.currentRow()
-        if row >= 0:
-            self.wiz_data_list.takeItem(row)
-
     # ── 导航 ──
     def _update_step(self, idx: int):
         for i, btn in enumerate(self._step_btns):
@@ -338,8 +343,8 @@ class ConfigWizard(QWidget):
             btn.setText(f"  {'●' if i == idx else '○'} {label}")
         self._stack.setCurrentIndex(idx)
         self.prev_btn.setEnabled(idx > 0)
-        self.next_btn.setVisible(idx < 4)
-        self.finish_btn.setVisible(idx == 4)
+        self.next_btn.setVisible(idx < 3)
+        self.finish_btn.setVisible(idx == 3)
 
     def _jump_to(self, idx: int):
         self._collect_current()
@@ -351,7 +356,7 @@ class ConfigWizard(QWidget):
             self._update_step(self._stack.currentIndex() - 1)
 
     def _next(self):
-        if self._stack.currentIndex() < 4:
+        if self._stack.currentIndex() < 3:
             self._collect_current()
             self._update_step(self._stack.currentIndex() + 1)
 
@@ -362,11 +367,19 @@ class ConfigWizard(QWidget):
             self._data["description"] = self.wiz_desc.text().strip()
             self._data["platform"] = self.wiz_platform.currentText()
             self._data["enabled"] = self.wiz_enabled.isChecked()
+            self._data["backup_scope"] = {
+                "config": self.wiz_scope_config.isChecked(),
+                "data": self.wiz_scope_data.isChecked(),
+            }
         elif idx == 1:
             paths = []
             for i in range(self.wiz_paths_list.count()):
                 paths.append(self.wiz_paths_list.item(i).text())
             self._data["paths"] = paths
+            data_paths = []
+            for i in range(self.wiz_data_list.count()):
+                data_paths.append(self.wiz_data_list.item(i).text())
+            self._data["data_paths"] = data_paths
         elif idx == 2:
             fields = {}
             for r in range(self.wiz_fields_table.rowCount()):
@@ -382,21 +395,12 @@ class ConfigWizard(QWidget):
             for i in range(self.wiz_ignore_list.count()):
                 ignores.append(self.wiz_ignore_list.item(i).text())
             self._data["strategy"]["ignore_patterns"] = ignores
-        elif idx == 4:
-            data_paths = []
-            for i in range(self.wiz_data_list.count()):
-                data_paths.append(self.wiz_data_list.item(i).text())
-            self._data["data_paths"] = data_paths
-            self._data["backup_scope"] = {
-                "config": self.wiz_scope_config.isChecked(),
-                "data": self.wiz_scope_data.isChecked(),
-            }
 
     def _finish(self):
         self._collect_current()
         if not self._data.get("name"):
             QMessageBox.warning(self, "提示", "名称不能为空")
-            self._update_step(0)
+            self._update_step(0 if not self._data.get("data_paths") else 1)
             return
         jsonc = serialize_to_jsonc(self._data)
         self._on_finish(jsonc)
@@ -448,7 +452,10 @@ class ConfigWizard(QWidget):
         for p in self._data.get("data_paths", []):
             self.wiz_data_list.addItem(p)
 
-        self._update_step(0)
+        if self._data.get("data_paths") or self._data.get("backup_scope", {}).get("data", False):
+            self._update_step(1)
+        else:
+            self._update_step(0)
 
     def get_jsonc(self) -> str:
         self._collect_current()
