@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QRunnable, Signal
 
 from src.storage.base import StorageBackend, RestoreResult
 from src.utils.file_locker import is_file_locked, schedule_reboot_replace, get_locked_processes
+from src.core.config_parser import resolve_path_for_platform
 
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,8 @@ class RestoreWorker(QRunnable):
 
             locked_files: list[Path] = []
             original_paths: dict[str, Path] = {}
-            cfg_paths = self.config.get("paths", [])
-            cfg_data_paths = self.config.get("data_paths", [])
+            cfg_paths = resolve_path_for_platform(self.config, "paths")
+            cfg_data_paths = resolve_path_for_platform(self.config, "data_paths")
 
             meta = self.storage.read_meta(config_name, self.backup_id)
             source_types: dict[str, str] = meta.get("source_types", {})

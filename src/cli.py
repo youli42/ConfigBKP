@@ -7,7 +7,7 @@ from PySide6.QtCore import QCoreApplication, QThreadPool
 from src.utils.app_path import get_config_dir, get_default_backup_dir
 from src.storage.local import LocalStorage
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
-from src.core.config_parser import load_config
+from src.core.config_parser import load_config, resolve_path_for_platform
 from src.utils.file_utils import collect_files, filter_ignored
 
 
@@ -35,14 +35,14 @@ def run_silent_backup():
             patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
 
             if scope.get("config", True):
-                cf = collect_files(cfg.get("paths", []))
+                cf = collect_files(resolve_path_for_platform(cfg, "paths"))
                 cf = filter_ignored(cf, patterns)
                 for k, v in cf.items():
                     files[k] = v
                     file_sources[k] = "config"
 
             if scope.get("data", False):
-                df = collect_files(cfg.get("data_paths", []))
+                df = collect_files(resolve_path_for_platform(cfg, "data_paths"))
                 df = filter_ignored(df, patterns)
                 for k, v in df.items():
                     files[k] = v

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 
-from src.core.config_parser import load_config, filter_by_platform, generate_description
+from src.core.config_parser import load_config, filter_by_platform, generate_description, resolve_path_for_platform
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
 from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
@@ -335,14 +335,14 @@ class HomeTab(QWidget):
             patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
 
             if scope.get("config", True):
-                cf = collect_files(cfg.get("paths", []))
+                cf = collect_files(resolve_path_for_platform(cfg, "paths"))
                 cf = filter_ignored(cf, patterns)
                 for k, v in cf.items():
                     files[k] = v
                     file_sources[k] = "config"
 
             if scope.get("data", False):
-                df = collect_files(cfg.get("data_paths", []))
+                df = collect_files(resolve_path_for_platform(cfg, "data_paths"))
                 df = filter_ignored(df, patterns)
                 for k, v in df.items():
                     files[k] = v

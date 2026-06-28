@@ -39,6 +39,25 @@ def generate_description(name: str, config: dict[str, Any], source_files: dict[s
     return "\n".join(lines) if len(lines) > 1 else lines[0]
 
 
+_PLATFORM_ALIAS = {
+    "windows": "windows",
+    "linux": "linux",
+    "darwin": "macos",
+}
+
+
+def resolve_path_for_platform(cfg: dict, key: str, system: str = "") -> list[str]:
+    if not system:
+        system = platform.system().lower()
+    plat_key = _PLATFORM_ALIAS.get(system, system)
+    val = cfg.get(key, [])
+    if isinstance(val, list):
+        return val
+    if isinstance(val, dict):
+        return val.get(plat_key, val.get("default", []))
+    return []
+
+
 def filter_by_platform(rules: list[dict]) -> list[dict]:
     system = platform.system().lower()
     result = []
