@@ -3,7 +3,7 @@ import json5
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QPlainTextEdit, QLabel, QMessageBox, QSplitter,
-    QListWidget, QAbstractItemView, QListWidgetItem,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QTabWidget,
 )
 from PySide6.QtGui import QFont
@@ -17,6 +17,7 @@ class ConfigTab(QWidget):
         super().__init__()
         self.config_dir = config_dir
         self._current_file: Path | None = None
+        self._suspend_enabled_toggle = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -34,10 +35,18 @@ class ConfigTab(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self.rule_list = QListWidget()
-        self.rule_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.rule_list.currentItemChanged.connect(self._on_list_selected)
-        splitter.addWidget(self.rule_list)
+        self.rule_table = QTableWidget()
+        self.rule_table.setColumnCount(3)
+        self.rule_table.setHorizontalHeaderLabels(["名称", "启用", "描述"])
+        self.rule_table.horizontalHeader().setStretchLastSection(True)
+        self.rule_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.rule_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.rule_table.verticalHeader().setVisible(False)
+        self.rule_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.rule_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.rule_table.itemSelectionChanged.connect(self._on_table_selected)
+        self.rule_table.itemChanged.connect(self._on_enabled_toggled)
+        splitter.addWidget(self.rule_table)
 
         self._editor_tabs = QTabWidget()
         self._editor_tabs.setTabPosition(QTabWidget.TabPosition.South)
@@ -71,7 +80,7 @@ class ConfigTab(QWidget):
 
         splitter.addWidget(editor_widget)
         editor_widget.setMinimumWidth(300)
-        splitter.setSizes([200, 500])
+        splitter.setSizes([250, 500])
         layout.addWidget(splitter)
 
         self.save_btn.clicked.connect(self._save)
@@ -124,8 +133,10 @@ class ConfigTab(QWidget):
 
     def refresh_rules(self):
         current_path = str(self._current_file) if self._current_file else ""
-        self.rule_list.blockSignals(True)
-        self.rule_list.clear()
+        self.rule_table.blockSignals(True)
+        self.rule_table.setRowCount(0)
+        self._rule_paths: dict[int, str] = {}
+
         for sub in ["builtin", "user"]:
             sub_dir = self.config_dir / sub
             if not sub_dir.exists():
@@ -133,28 +144,48 @@ class ConfigTab(QWidget):
             for fpath in sorted(sub_dir.glob("*.jsonc")):
                 try:
                     cfg = load_config(fpath)
-                    name = cfg.get("name", fpath.stem)
-                    item = QListWidgetItem(name)
-                    item.setData(Qt.ItemDataRole.UserRole, str(fpath))
-                    item.setToolTip(str(fpath))
-                    self.rule_list.addItem(item)
                 except Exception:
                     continue
-        self.rule_list.blockSignals(False)
-        if current_path:
-            for i in range(self.rule_list.count()):
-                if self.rule_list.item(i).data(Qt.ItemDataRole.UserRole) == current_path:
-                    self.rule_list.setCurrentRow(i)
-                    return
-        if self.rule_list.count() > 0:
-            self.rule_list.setCurrentRow(0)
+                name = cfg.get("name", fpath.stem)
+                version = cfg.get("version", 1)
+                enabled = cfg.get("enabled", True)
+                desc = cfg.get("description", "")
+                self._add_rule_row(name, version, enabled, desc, str(fpath))
 
-    def _on_list_selected(self, current: QListWidgetItem | None, previous: QListWidgetItem | None):
-        if not current:
+        self.rule_table.blockSignals(False)
+        if current_path:
+            for r in range(self.rule_table.rowCount()):
+                if self._rule_paths.get(r) == current_path:
+                    self.rule_table.selectRow(r)
+                    return
+        if self.rule_table.rowCount() > 0:
+            self.rule_table.selectRow(0)
+
+    def _add_rule_row(self, name: str, version: int, enabled: bool, desc: str, fpath: str):
+        r = self.rule_table.rowCount()
+        self.rule_table.insertRow(r)
+        ver_badge = f"v{version}" if version else ""
+        display_name = f"{name}  [{ver_badge}]" if ver_badge else name
+        self.rule_table.setItem(r, 0, QTableWidgetItem(display_name))
+        self.rule_table.item(r, 0).setData(Qt.ItemDataRole.UserRole, fpath)
+        self.rule_table.item(r, 0).setToolTip(fpath)
+
+        cb = QTableWidgetItem()
+        cb.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        cb.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+        self.rule_table.setItem(r, 1, cb)
+
+        self.rule_table.setItem(r, 2, QTableWidgetItem(desc))
+        self._rule_paths[r] = fpath
+
+    def _on_table_selected(self):
+        rows = self.rule_table.selectedItems()
+        if not rows:
             self.editor.clear()
             self._current_file = None
             return
-        fpath_str = current.data(Qt.ItemDataRole.UserRole)
+        r = rows[0].row()
+        fpath_str = self.rule_table.item(r, 0).data(Qt.ItemDataRole.UserRole)
         if fpath_str:
             self._current_file = Path(fpath_str)
             try:
@@ -167,6 +198,33 @@ class ConfigTab(QWidget):
                 self.editor.clear()
                 self.validation_label.setText(f"读取失败: {e}")
                 self.validation_label.setStyleSheet("color: red;")
+
+    def _on_enabled_toggled(self, item: QTableWidgetItem):
+        if self._suspend_enabled_toggle or item.column() != 1:
+            return
+        r = item.row()
+        fpath_str = self.rule_table.item(r, 0).data(Qt.ItemDataRole.UserRole)
+        if not fpath_str:
+            return
+        new_state = item.checkState() == Qt.CheckState.Checked
+        fpath = Path(fpath_str)
+        try:
+            import re
+            old_text = fpath.read_text(encoding="utf-8")
+            new_val = "true" if new_state else "false"
+            new_text, n = re.subn(
+                r'("enabled"\s*:\s*)true|("enabled"\s*:\s*)false',
+                lambda m: (m.group(1) or m.group(2)) + new_val,
+                old_text, count=1,
+            )
+            if n == 0:
+                raise ValueError("未找到 enabled 字段")
+            fpath.write_text(new_text, encoding="utf-8")
+        except Exception as e:
+            self._suspend_enabled_toggle = True
+            item.setCheckState(Qt.CheckState.Unchecked if new_state else Qt.CheckState.Checked)
+            self._suspend_enabled_toggle = False
+            QMessageBox.critical(self, "错误", f"写入失败，已回滚: {e}")
 
     def _save(self):
         if not self._current_file:
@@ -225,9 +283,9 @@ class ConfigTab(QWidget):
         new_file = user_dir / f"new_rule_{len(list(user_dir.glob('*.jsonc'))) + 1}.jsonc"
         new_file.write_text(template, encoding="utf-8")
         self.refresh_rules()
-        for i in range(self.rule_list.count()):
-            if self.rule_list.item(i).data(Qt.ItemDataRole.UserRole) == str(new_file):
-                self.rule_list.setCurrentRow(i)
+        for r in range(self.rule_table.rowCount()):
+            if self.rule_table.item(r, 0).data(Qt.ItemDataRole.UserRole) == str(new_file):
+                self.rule_table.selectRow(r)
                 break
         QMessageBox.information(self, "已创建", f"已创建新规则:\n{new_file}")
 

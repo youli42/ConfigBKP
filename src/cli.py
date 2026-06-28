@@ -8,7 +8,7 @@ from src.utils.app_path import get_config_dir, get_default_backup_dir
 from src.storage.local import LocalStorage
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
 from src.core.config_parser import load_config
-from src.utils.path_expander import expand
+from src.utils.file_utils import collect_files, filter_ignored
 
 
 logger = logging.getLogger(__name__)
@@ -29,17 +29,9 @@ def run_silent_backup():
                 continue
             if not cfg.get("enabled", True):
                 continue
-            files = {}
-            for p in cfg.get("paths", []):
-                expanded = expand(p)
-                if expanded.exists():
-                    if expanded.is_file():
-                        files[expanded.name] = expanded
-                    elif expanded.is_dir():
-                        for f in expanded.rglob("*"):
-                            if f.is_file():
-                                rel = str(f.relative_to(expanded.parent))
-                                files[rel] = f
+            files = collect_files(cfg.get("paths", []))
+            patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
+            files = filter_ignored(files, patterns)
             items.append((cfg, files))
 
     app = QCoreApplication(sys.argv)

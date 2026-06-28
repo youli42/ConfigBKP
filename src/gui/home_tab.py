@@ -13,8 +13,8 @@ from src.core.config_parser import load_config, filter_by_platform, generate_des
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
 from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
-from src.utils.path_expander import expand
 from src.utils.time_util import utc_to_local
+from src.utils.file_utils import collect_files, filter_ignored
 
 
 class HomeTab(QWidget):
@@ -51,14 +51,17 @@ class HomeTab(QWidget):
         btn_row.addWidget(self.deselect_all_btn)
         btn_row.addStretch()
         left_layout.addLayout(btn_row)
-        self.config_list = QWidget()
-        self.config_list_layout = QVBoxLayout(self.config_list)
-        self.config_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        scroll_area = QWidget()
-        scroll_layout = QVBoxLayout(scroll_area)
-        scroll_layout.addWidget(self.config_list)
-        scroll_layout.addStretch()
-        left_layout.addWidget(scroll_area)
+        self.config_table = QTableWidget()
+        self.config_table.setColumnCount(4)
+        self.config_table.setHorizontalHeaderLabels(["", "名称", "描述", "范围"])
+        self.config_table.horizontalHeader().setStretchLastSection(True)
+        self.config_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.config_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.config_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.config_table.verticalHeader().setVisible(False)
+        self.config_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.config_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        left_layout.addWidget(self.config_table)
         upper_layout.addWidget(left_group)
 
         right_group = QGroupBox("操作")
@@ -163,11 +166,10 @@ class HomeTab(QWidget):
 
     def refresh_configs(self):
         self._configs.clear()
-        for child in reversed(self.config_list.findChildren(QWidget)):
-            child.setParent(None)
-            child.deleteLater()
         self._checkboxes.clear()
+        self.config_table.setRowCount(0)
 
+        rows_data = []
         for sub in ["builtin", "user"]:
             sub_dir = self.config_dir / sub
             if not sub_dir.exists():
@@ -181,24 +183,45 @@ class HomeTab(QWidget):
                     continue
                 name = cfg.get("name", fpath.stem)
                 self._configs[name] = cfg
-                cb = QCheckBox(name)
-                self._checkboxes[name] = cb
-                desc = cfg.get("description", "")
-                if desc:
-                    cb.setToolTip(desc)
+                scope = cfg.get("backup_scope", {})
+                scope_label = self._fmt_scope(scope)
+                rows_data.append((name, cfg.get("description", ""), scope_label))
 
-        self._rebuild_config_list()
+        self._rebuild_config_list(rows_data)
         self._refresh_sessions()
 
-    def _rebuild_config_list(self):
-        while self.config_list_layout.count():
-            item = self.config_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
-        items = sorted(self._checkboxes.items(), key=lambda x: not x[1].isChecked())
-        for name, cb in items:
-            self.config_list_layout.addWidget(cb)
-        self.config_list_layout.addStretch()
+    @staticmethod
+    def _fmt_scope(scope: dict) -> str:
+        cfg = scope.get("config", True)
+        data = scope.get("data", False)
+        if cfg and data:
+            return "配置+数据"
+        if data:
+            return "数据"
+        return "配置"
+
+    def _rebuild_config_list(self, rows_data: list[tuple[str, str, str]] | None = None):
+        self.config_table.setRowCount(0)
+        if rows_data is None:
+            return
+        # Build full row data from _configs if rows_data not provided
+        if not rows_data and self._configs:
+            for name in self._configs:
+                rows_data.append((name, "", ""))
+        names = [r[0] for r in rows_data]
+        # Sort: checked first, then unchecked
+        checked = {n for n in names if self._checkboxes.get(n, QCheckBox()).isChecked()}
+        rows_data.sort(key=lambda r: (r[0] not in checked))
+        for name, desc, scope_label in rows_data:
+            row = self.config_table.rowCount()
+            self.config_table.insertRow(row)
+            cb = QTableWidgetItem()
+            cb.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            cb.setCheckState(Qt.CheckState.Checked if name in checked else Qt.CheckState.Unchecked)
+            self.config_table.setItem(row, 0, cb)
+            self.config_table.setItem(row, 1, QTableWidgetItem(name))
+            self.config_table.setItem(row, 2, QTableWidgetItem(desc))
+            self.config_table.setItem(row, 3, QTableWidgetItem(scope_label))
 
     def _refresh_sessions(self, storage: Optional[StorageBackend] = None):
         self.session_table.setRowCount(0)
@@ -241,18 +264,28 @@ class HomeTab(QWidget):
     def _scan(self):
         from src.core.scanner import scan_installed
         matched = scan_installed([self.config_dir / "builtin", self.config_dir / "user"])
-        for name, cb in self._checkboxes.items():
-            cb.setChecked(name in matched)
-        self._rebuild_config_list()
+        rows_data = []
+        for r in range(self.config_table.rowCount()):
+            name = self.config_table.item(r, 1).text()
+            desc = self.config_table.item(r, 2).text()
+            scope_label = self.config_table.item(r, 3).text()
+            rows_data.append((name, desc, scope_label))
+            self._checkboxes[name] = QCheckBox()
+            self._checkboxes[name].setChecked(name in matched)
+        self._rebuild_config_list(rows_data)
         self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
 
     def _select_all(self):
-        for cb in self._checkboxes.values():
-            cb.setChecked(True)
+        for r in range(self.config_table.rowCount()):
+            cb = self.config_table.item(r, 0)
+            if cb:
+                cb.setCheckState(Qt.CheckState.Checked)
 
     def _deselect_all(self):
-        for cb in self._checkboxes.values():
-            cb.setChecked(False)
+        for r in range(self.config_table.rowCount()):
+            cb = self.config_table.item(r, 0)
+            if cb:
+                cb.setCheckState(Qt.CheckState.Unchecked)
 
     def _browse_target(self):
         folder = QFileDialog.getExistingDirectory(self, "选择备份目标目录")
@@ -261,9 +294,12 @@ class HomeTab(QWidget):
 
     def _get_selected_configs(self) -> list[dict]:
         selected = []
-        for name, cb in self._checkboxes.items():
-            if cb.isChecked():
-                selected.append(self._configs[name])
+        for r in range(self.config_table.rowCount()):
+            cb = self.config_table.item(r, 0)
+            if cb and cb.checkState() == Qt.CheckState.Checked:
+                name = self.config_table.item(r, 1).text()
+                if name in self._configs:
+                    selected.append(self._configs[name])
         return selected
 
     def _backup(self):
@@ -293,17 +329,9 @@ class HomeTab(QWidget):
         items = []
         note = self.note_input.toPlainText()
         for cfg in configs:
-            files = {}
-            for p in cfg.get("paths", []):
-                expanded = expand(p)
-                if expanded.exists():
-                    if expanded.is_file():
-                        files[expanded.name] = expanded
-                    elif expanded.is_dir():
-                        for f in expanded.rglob("*"):
-                            if f.is_file():
-                                rel = str(f.relative_to(expanded.parent))
-                                files[rel] = f
+            files = collect_files(cfg.get("paths", []))
+            patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
+            files = filter_ignored(files, patterns)
             items.append((cfg, files))
 
         skipped = [cfg["name"] for cfg, files in items if not files]
