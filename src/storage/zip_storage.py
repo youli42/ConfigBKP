@@ -1,12 +1,25 @@
 import json
 import zipfile
 import shutil
+import atexit
 from pathlib import Path, PurePosixPath
 from typing import Optional
 from datetime import datetime, timezone
 from src.storage.base import StorageBackend, BackupResult, RestoreResult, BackupVersion, BackupSession
 from src.storage._utils import build_sessions_from_meta
 import tempfile
+
+
+_temp_dirs: set[Path] = set()
+
+
+def _cleanup_all_temp():
+    for d in list(_temp_dirs):
+        shutil.rmtree(d, ignore_errors=True)
+    _temp_dirs.clear()
+
+
+atexit.register(_cleanup_all_temp)
 
 
 def _read_meta_from_zip(zip_path: Path) -> dict:
@@ -40,6 +53,7 @@ class ZipStorage(StorageBackend):
     def _ensure_temp(self) -> Path:
         if self._temp_dir is None:
             self._temp_dir = Path(tempfile.mkdtemp(prefix="winbkp_"))
+            _temp_dirs.add(self._temp_dir)
         return self._temp_dir
 
     def save(self, backup_id: str, config_name: str, files: dict[str, Path], note: str, description: str,
@@ -104,19 +118,21 @@ class ZipStorage(StorageBackend):
         restored = []
         extract_dir = self._ensure_temp() / backup_id
         extract_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            ZipStorage._safe_extract(zf, extract_dir)
-        for item in extract_dir.rglob("*"):
-            if item.is_file() and item.name != ".metadata.json":
-                rel = item.relative_to(extract_dir)
-                if target_dir:
-                    dst = target_dir / rel
-                else:
-                    dst = rel
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(item, dst)
-                restored.append(dst)
-        shutil.rmtree(extract_dir, ignore_errors=True)
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                ZipStorage._safe_extract(zf, extract_dir)
+            for item in extract_dir.rglob("*"):
+                if item.is_file() and item.name != ".metadata.json":
+                    rel = item.relative_to(extract_dir)
+                    if target_dir:
+                        dst = target_dir / rel
+                    else:
+                        dst = rel
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, dst)
+                    restored.append(dst)
+        finally:
+            shutil.rmtree(extract_dir, ignore_errors=True)
         return RestoreResult(config_name, restored, [])
 
     def get_files(self, config_name: str, backup_id: str) -> dict[str, Path]:

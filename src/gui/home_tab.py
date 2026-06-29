@@ -273,6 +273,7 @@ class HomeTab(QWidget):
             self._checkboxes[name] = QCheckBox()
             self._checkboxes[name].setChecked(name in matched)
         self._rebuild_config_list(rows_data)
+        self._refresh_sessions()
         self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
 
     def _select_all(self):
@@ -508,11 +509,13 @@ class HomeTab(QWidget):
             return
         items = []
         for r in range(self.detail_table.rowCount()):
-            config_name = self.detail_table.item(r, 1).text()
-            backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
-            items.append((config_name, backup_id))
+            cb = self.detail_table.item(r, 0)
+            if cb and cb.checkState() == Qt.CheckState.Checked:
+                config_name = self.detail_table.item(r, 1).text()
+                backup_id = self.detail_table.item(r, 1).data(Qt.ItemDataRole.UserRole)
+                items.append((config_name, backup_id))
         if not items:
-            QMessageBox.information(self, "提示", "该备份记录无可恢复的版本")
+            QMessageBox.information(self, "提示", "请勾选要恢复的配置版本")
             return
         names = [n for n, _ in items]
         reply = QMessageBox.question(

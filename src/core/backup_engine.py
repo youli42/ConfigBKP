@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import logging
 from pathlib import Path
 from typing import Optional
@@ -35,7 +36,8 @@ class BackupWorker(QRunnable):
     def run(self):
         try:
             config_name = self.config["name"]
-            backup_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            ts = time.time_ns()
+            backup_id = datetime.fromtimestamp(ts / 1e9, tz=timezone.utc).strftime("%Y%m%d-%H%M%S") + f"-{ts % 10**9:09d}"
 
             self.signals.message.emit("正在计算文件哈希...")
             self.signals.progress.emit(10)
@@ -147,7 +149,8 @@ class BatchBackupWorker(QRunnable):
                     self.signals.message.emit(f"[{idx+1}/{total}] {name}: 无文件，已跳过")
                     self.signals.progress.emit(int((idx + 1) / total * 100))
                     continue
-                backup_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                ts = time.time_ns()
+                backup_id = datetime.fromtimestamp(ts / 1e9, tz=timezone.utc).strftime("%Y%m%d-%H%M%S") + f"-{ts % 10**9:09d}"
                 manifest_dir = self.manifest_base_dir / name
                 manifest_mgr = ManifestManager(manifest_dir)
                 changed, _ = manifest_mgr.compute_changes(files)
