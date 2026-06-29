@@ -5,9 +5,6 @@ from functools import reduce
 from typing import Any
 
 
-_OVERRIDE_KEY = "$schema"
-
-
 def load_config(filepath: Path) -> dict[str, Any]:
     with open(filepath, encoding="utf-8") as f:
         return json5.load(f)
@@ -28,8 +25,7 @@ def generate_description(name: str, config: dict[str, Any], source_files: dict[s
             continue
         try:
             content_text = filepath.read_text(encoding="utf-8")
-            import json5 as _json5
-            data = _json5.loads(content_text)
+            data = json5.loads(content_text)
         except Exception:
             continue
         for dotted_path, label in parser_fields.items():

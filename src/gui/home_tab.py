@@ -200,17 +200,19 @@ class HomeTab(QWidget):
             return "数据"
         return "配置"
 
-    def _rebuild_config_list(self, rows_data: list[tuple[str, str, str]] | None = None):
+    def _rebuild_config_list(self, rows_data: list[tuple[str, str, str]] | None = None,
+                             checked_names: set[str] | None = None):
         self.config_table.setRowCount(0)
         if rows_data is None:
             return
-        # Build full row data from _configs if rows_data not provided
         if not rows_data and self._configs:
             for name in self._configs:
                 rows_data.append((name, "", ""))
         names = [r[0] for r in rows_data]
-        # Sort: checked first, then unchecked
-        checked = {n for n in names if self._checkboxes.get(n, QCheckBox()).isChecked()}
+        if checked_names is None:
+            checked = {n for n in names if self._checkboxes.get(n) is not None and self._checkboxes[n]}
+        else:
+            checked = checked_names
         rows_data.sort(key=lambda r: (r[0] not in checked))
         for name, desc, scope_label in rows_data:
             row = self.config_table.rowCount()
@@ -270,9 +272,8 @@ class HomeTab(QWidget):
             desc = self.config_table.item(r, 2).text()
             scope_label = self.config_table.item(r, 3).text()
             rows_data.append((name, desc, scope_label))
-            self._checkboxes[name] = QCheckBox()
-            self._checkboxes[name].setChecked(name in matched)
-        self._rebuild_config_list(rows_data)
+            self._checkboxes[name] = name in matched
+        self._rebuild_config_list(rows_data, set(matched))
         self._refresh_sessions()
         self.status_label.setText(f"扫描完成，匹配 {len(matched)} 条规则")
 

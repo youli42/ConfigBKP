@@ -15,6 +15,15 @@ from src.utils.path_expander import expand
 logger = logging.getLogger(__name__)
 
 
+def _do_prune(cfg: dict, storage: 'StorageBackend', config_name: str):
+    max_versions = cfg.get("strategy", {}).get("max_versions", 10)
+    versions = storage.list_versions(config_name)
+    if len(versions) > max_versions:
+        logger.debug("[%s] 裁剪旧版本: %d → %d", config_name, len(versions), max_versions)
+        for old in versions[max_versions:]:
+            storage.delete_version(config_name, old.backup_id)
+
+
 class BackupSignals(QObject):
     progress = Signal(int)
     message = Signal(str)
@@ -90,12 +99,7 @@ class BackupWorker(QRunnable):
             self.signals.error.emit(str(e))
 
     def _prune_versions(self, config_name: str):
-        max_versions = self.config.get("strategy", {}).get("max_versions", 10)
-        versions = self.storage.list_versions(config_name)
-        if len(versions) > max_versions:
-            logger.debug("[%s] 裁剪旧版本: %d → %d", config_name, len(versions), max_versions)
-            for old in versions[max_versions:]:
-                self.storage.delete_version(config_name, old.backup_id)
+        _do_prune(self.config, self.storage, config_name)
 
 
 class BackupSummary:
@@ -182,9 +186,4 @@ class BatchBackupWorker(QRunnable):
         self.signals.done.emit(summary)
 
     def _prune_versions(self, config_name: str):
-        cfg = self._config_index.get(config_name, {})
-        max_versions = cfg.get("strategy", {}).get("max_versions", 10)
-        versions = self.storage.list_versions(config_name)
-        if len(versions) > max_versions:
-            for old in versions[max_versions:]:
-                self.storage.delete_version(config_name, old.backup_id)
+        _do_prune(self._config_index.get(config_name, {}), self.storage, config_name)
