@@ -353,7 +353,7 @@ class HomeTab(QWidget):
 
             items.append((cfg, files, file_sources))
 
-        skipped = [cfg["name"] for cfg, files in items if not files]
+        skipped = [cfg["name"] for cfg, files, _ in items if not files]
         if skipped:
             reply = QMessageBox.question(
                 self, "路径不存在",
