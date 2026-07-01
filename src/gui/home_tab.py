@@ -9,12 +9,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 
-from src.core.config_parser import load_config, filter_by_platform, generate_description, resolve_path_for_platform
+from src.core.config_parser import load_config, filter_by_platform
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
 from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
 from src.utils.time_util import utc_to_local
-from src.utils.file_utils import collect_files, filter_ignored
 
 
 class HomeTab(QWidget):
@@ -222,7 +221,9 @@ class HomeTab(QWidget):
             cb.setCheckState(Qt.CheckState.Checked if name in checked else Qt.CheckState.Unchecked)
             self.config_table.setItem(row, 0, cb)
             self.config_table.setItem(row, 1, QTableWidgetItem(name))
-            self.config_table.setItem(row, 2, QTableWidgetItem(desc))
+            desc_item = QTableWidgetItem(desc)
+            desc_item.setToolTip(desc)
+            self.config_table.setItem(row, 2, desc_item)
             self.config_table.setItem(row, 3, QTableWidgetItem(scope_label))
 
     def _refresh_sessions(self, storage: Optional[StorageBackend] = None):
@@ -328,44 +329,7 @@ class HomeTab(QWidget):
             from src.storage.local import LocalStorage
             storage = LocalStorage(Path(target_path_str))
 
-        items = []
         note = self.note_input.toPlainText()
-        for cfg in configs:
-            files: dict[str, Path] = {}
-            file_sources: dict[str, str] = {}
-            scope = cfg.get("backup_scope", {"config": True, "data": False})
-            patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
-
-            if scope.get("config", True):
-                cf = collect_files(resolve_path_for_platform(cfg, "paths"))
-                cf = filter_ignored(cf, patterns)
-                for k, v in cf.items():
-                    files[k] = v
-                    file_sources[k] = "config"
-
-            if scope.get("data", False):
-                df = collect_files(resolve_path_for_platform(cfg, "data_paths"))
-                df = filter_ignored(df, patterns)
-                for k, v in df.items():
-                    files[k] = v
-                    if k not in file_sources:
-                        file_sources[k] = "data"
-
-            items.append((cfg, files, file_sources))
-
-        skipped = [cfg["name"] for cfg, files, _ in items if not files]
-        if skipped:
-            reply = QMessageBox.question(
-                self, "路径不存在",
-                f"以下配置的源文件路径不存在，将被跳过：\n" + "\n".join(f"  • {n}" for n in skipped) +
-                "\n\n是否继续备份其他配置？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                self.backup_btn.setEnabled(True)
-                self.restore_btn.setEnabled(True)
-                self._is_backing_up = False
-                return
 
         self._backup_signals = BatchBackupSignals()
         self._backup_signals.progress.connect(self.progress_bar.setValue)
@@ -374,7 +338,7 @@ class HomeTab(QWidget):
         self._backup_signals.error.connect(lambda msg: self._backup_error(msg))
 
         manifest_base_dir = Path(target_path_str)
-        worker = BatchBackupWorker(items, storage, manifest_base_dir, note, self._backup_signals)
+        worker = BatchBackupWorker(configs, storage, manifest_base_dir, note, self._backup_signals)
         self.threadpool.start(worker)
 
     def _on_session_selected(self):

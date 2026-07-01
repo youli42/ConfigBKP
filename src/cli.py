@@ -7,8 +7,7 @@ from PySide6.QtCore import QCoreApplication, QThreadPool
 from src.utils.app_path import get_config_dir, get_default_backup_dir
 from src.storage.local import LocalStorage
 from src.core.backup_engine import BatchBackupWorker, BatchBackupSignals, BackupSummary
-from src.core.config_parser import load_config, resolve_path_for_platform
-from src.utils.file_utils import collect_files, filter_ignored
+from src.core.config_parser import load_config
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ def run_silent_backup():
     logger.info("静默备份模式（--silent-backup）")
     config_dirs = [get_config_dir() / "builtin", get_config_dir() / "user"]
     storage = LocalStorage(get_default_backup_dir())
-    items = []
+    configs = []
     for cfg_dir in config_dirs:
         if not cfg_dir.exists():
             continue
@@ -29,27 +28,7 @@ def run_silent_backup():
                 continue
             if not cfg.get("enabled", True):
                 continue
-            files: dict[str, Path] = {}
-            file_sources: dict[str, str] = {}
-            scope = cfg.get("backup_scope", {"config": True, "data": False})
-            patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
-
-            if scope.get("config", True):
-                cf = collect_files(resolve_path_for_platform(cfg, "paths"))
-                cf = filter_ignored(cf, patterns)
-                for k, v in cf.items():
-                    files[k] = v
-                    file_sources[k] = "config"
-
-            if scope.get("data", False):
-                df = collect_files(resolve_path_for_platform(cfg, "data_paths"))
-                df = filter_ignored(df, patterns)
-                for k, v in df.items():
-                    files[k] = v
-                    if k not in file_sources:
-                        file_sources[k] = "data"
-
-            items.append((cfg, files, file_sources))
+            configs.append(cfg)
 
     app = QCoreApplication(sys.argv)
     signals = BatchBackupSignals()
@@ -60,7 +39,7 @@ def run_silent_backup():
         app.quit()
 
     signals.done.connect(on_done)
-    worker = BatchBackupWorker(items, storage, get_default_backup_dir(), "", signals)
+    worker = BatchBackupWorker(configs, storage, get_default_backup_dir(), "", signals)
     QThreadPool().start(worker)
     app.exec()
 

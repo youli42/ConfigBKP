@@ -126,25 +126,62 @@ class BatchBackupSignals(QObject):
 
 
 class BatchBackupWorker(QRunnable):
-    def __init__(self, items: list[tuple[dict, dict[str, Path], dict[str, str]]],
+    def __init__(self, configs: list[dict],
                  storage: StorageBackend, manifest_base_dir: Path,
                  note: str, signals: BatchBackupSignals):
         super().__init__()
-        self.items = items
+        self.configs = configs
         self.storage = storage
         self.manifest_base_dir = manifest_base_dir
         self.note = note
         self.signals = signals
         self._config_index: dict[str, dict] = {}
 
+    @staticmethod
+    def _collect_files_for_config(cfg: dict):
+        from src.core.config_parser import resolve_path_for_platform
+        from src.utils.file_utils import collect_files, filter_ignored
+        files: dict[str, Path] = {}
+        file_sources: dict[str, str] = {}
+        scope = cfg.get("backup_scope", {"config": True, "data": False})
+        patterns = cfg.get("strategy", {}).get("ignore_patterns", [])
+
+        if scope.get("config", True):
+            cf = collect_files(resolve_path_for_platform(cfg, "paths"))
+            cf = filter_ignored(cf, patterns)
+            for k, v in cf.items():
+                files[k] = v
+                file_sources[k] = "config"
+
+        if scope.get("data", False):
+            df = collect_files(resolve_path_for_platform(cfg, "data_paths"))
+            df = filter_ignored(df, patterns)
+            for k, v in df.items():
+                if k not in file_sources:
+                    files[k] = v
+                    file_sources[k] = "data"
+
+        return files, file_sources
+
     def run(self):
         session_id = "session_" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
         summary = BackupSummary(session_id=session_id)
-        total = len(self.items)
+        total = len(self.configs)
         logger.debug("批量备份开始，共 %d 个配置, session=%s", total, session_id)
-        for idx, (cfg, files, file_sources) in enumerate(self.items):
+
+        for idx, cfg in enumerate(self.configs):
             name = cfg["name"]
             self._config_index[name] = cfg
+            self.signals.message.emit(f"[{idx+1}/{total}] 正在收集 {name} 文件...")
+            try:
+                files, file_sources = self._collect_files_for_config(cfg)
+            except Exception as e:
+                logger.debug("[%s] 文件收集失败: %s", name, e)
+                summary.errors.append((name, f"文件收集失败: {e}"))
+                self.signals.message.emit(f"[{idx+1}/{total}] {name}: 收集失败 - {e}")
+                self.signals.progress.emit(int((idx + 1) / total * 100))
+                continue
+
             self.signals.message.emit(f"[{idx+1}/{total}] 正在处理 {name}...")
             try:
                 if not files:

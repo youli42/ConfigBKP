@@ -9,11 +9,12 @@ def filter_ignored(files: dict[str, Path], patterns: list[str]) -> dict[str, Pat
             if not any(fnmatch.fnmatch(rel, p) for p in patterns)}
 
 
-def collect_files(paths: list[str]) -> dict[str, Path]:
+def collect_files(paths: list) -> dict[str, Path]:
     from src.utils.path_expander import expand
     files: dict[str, Path] = {}
     for p in paths:
-        expanded = expand(p)
+        path_str = p["path"] if isinstance(p, dict) else p
+        expanded = expand(path_str)
         if expanded.exists():
             if expanded.is_file():
                 files[expanded.name] = expanded
