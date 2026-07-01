@@ -10,7 +10,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 from src.core.config_parser import load_config
 from src.gui.config_wizard import ConfigWizard, parse_to_form_data
-from src.utils.i18n import tr
+from src.utils.i18n import tr, on_locale_changed, off_locale_changed
 
 
 class ConfigTab(QWidget):
@@ -19,13 +19,17 @@ class ConfigTab(QWidget):
         self.config_dir = config_dir
         self._current_file: Path | None = None
         self._setup_ui()
+        self.retranslate_ui()
+        self._retranslate_cb = self.retranslate_ui
+        on_locale_changed(self._retranslate_cb)
+        self.destroyed.connect(self._on_destroy)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
         top_bar = QHBoxLayout()
-        self.new_btn = QPushButton(tr("新建"))
-        self.delete_btn = QPushButton(tr("删除"))
+        self.new_btn = QPushButton()
+        self.delete_btn = QPushButton()
         top_bar.addWidget(self.new_btn)
         top_bar.addWidget(self.delete_btn)
         self.mode_switcher = QTabWidget()
@@ -44,14 +48,13 @@ class ConfigTab(QWidget):
         self._editor_tabs.setTabPosition(QTabWidget.TabPosition.South)
 
         self.editor = QPlainTextEdit()
-        self.editor.setPlaceholderText(tr("在此编辑 JSONC 配置..."))
         self.editor.setFont(QFont("Consolas", 10))
         self.editor.textChanged.connect(self._on_source_changed)
-        self._editor_tabs.addTab(self.editor, tr("源码"))
+        self._editor_tabs.addTab(self.editor, "")
 
         self.wizard = ConfigWizard()
         self.wizard.set_on_finish(self._on_wizard_finish)
-        self._editor_tabs.addTab(self.wizard, tr("向导"))
+        self._editor_tabs.addTab(self.wizard, "")
 
         self._editor_tabs.currentChanged.connect(self._on_tab_switched)
 
@@ -63,8 +66,8 @@ class ConfigTab(QWidget):
         self.validation_label = QLabel("")
         self.validation_label.setStyleSheet("color: green;")
         bottom_bar.addWidget(self.validation_label)
-        self.save_btn = QPushButton(tr("保存"))
-        self.scan_btn = QPushButton(tr("扫描本机已装软件"))
+        self.save_btn = QPushButton()
+        self.scan_btn = QPushButton()
         bottom_bar.addStretch()
         bottom_bar.addWidget(self.scan_btn)
         bottom_bar.addWidget(self.save_btn)
@@ -81,6 +84,18 @@ class ConfigTab(QWidget):
         self.delete_btn.clicked.connect(self._delete_rule)
 
         self.refresh_rules()
+
+    def retranslate_ui(self):
+        self.new_btn.setText(tr("新建"))
+        self.delete_btn.setText(tr("删除"))
+        self.editor.setPlaceholderText(tr("在此编辑 JSONC 配置..."))
+        self._editor_tabs.setTabText(0, tr("源码"))
+        self._editor_tabs.setTabText(1, tr("向导"))
+        self.save_btn.setText(tr("保存"))
+        self.scan_btn.setText(tr("扫描本机已装软件"))
+
+    def _on_destroy(self):
+        off_locale_changed(self._retranslate_cb)
 
     def _on_source_changed(self):
         text = self.editor.toPlainText()

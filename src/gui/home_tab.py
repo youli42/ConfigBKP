@@ -15,7 +15,7 @@ from src.core.restore_engine import RestoreWorker, RestoreSignals
 from src.storage.base import StorageBackend, BackupVersion
 from src.utils.path_expander import expand
 from src.utils.time_util import utc_to_local
-from src.utils.i18n import tr
+from src.utils.i18n import tr, on_locale_changed, off_locale_changed
 
 
 class HomeTab(QWidget):
@@ -31,14 +31,18 @@ class HomeTab(QWidget):
         self._is_backing_up = False
         self._is_restoring = False
         self._setup_ui()
+        self.retranslate_ui()
+        self._retranslate_cb = self.retranslate_ui
+        on_locale_changed(self._retranslate_cb)
+        self.destroyed.connect(self._on_destroy)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
         top_bar = QHBoxLayout()
-        self.scan_btn = QPushButton(tr("扫描本机已装软件"))
-        self.select_all_btn = QPushButton(tr("全选"))
-        self.deselect_all_btn = QPushButton(tr("取消全选"))
+        self.scan_btn = QPushButton()
+        self.select_all_btn = QPushButton()
+        self.deselect_all_btn = QPushButton()
         top_bar.addWidget(self.scan_btn)
         top_bar.addWidget(self.select_all_btn)
         top_bar.addWidget(self.deselect_all_btn)
@@ -51,8 +55,8 @@ class HomeTab(QWidget):
         upper_layout = QHBoxLayout(upper)
         upper_layout.setContentsMargins(0, 0, 0, 0)
 
-        left_group = QGroupBox(tr("配置规则"))
-        left_layout = QVBoxLayout(left_group)
+        self.left_group = QGroupBox()
+        left_layout = QVBoxLayout(self.left_group)
         self.config_list = QWidget()
         self.config_list_layout = QVBoxLayout(self.config_list)
         self.config_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -61,23 +65,23 @@ class HomeTab(QWidget):
         scroll_layout.addWidget(self.config_list)
         scroll_layout.addStretch()
         left_layout.addWidget(scroll_area)
-        upper_layout.addWidget(left_group)
+        upper_layout.addWidget(self.left_group)
 
-        right_group = QGroupBox(tr("操作"))
-        right_layout = QVBoxLayout(right_group)
+        self.right_group = QGroupBox()
+        right_layout = QVBoxLayout(self.right_group)
 
         self.note_input = QTextEdit()
-        self.note_input.setPlaceholderText(tr("备份备注（可选）"))
         self.note_input.setMaximumHeight(60)
-        right_layout.addWidget(QLabel(tr("备注:")))
+        self._note_label = QLabel()
+        right_layout.addWidget(self._note_label)
         right_layout.addWidget(self.note_input)
 
         target_layout = QHBoxLayout()
-        target_layout.addWidget(QLabel(tr("备份目标:")))
+        self._target_label = QLabel()
         self.target_combo = QComboBox()
-        self.target_combo.addItems([tr("本地目录"), tr("ZIP 打包")])
-        self.target_browse_btn = QPushButton(tr("浏览..."))
+        self.target_browse_btn = QPushButton()
         self.target_path_label = QLabel(str(self.storage.base_dir))
+        target_layout.addWidget(self._target_label)
         target_layout.addWidget(self.target_combo)
         target_layout.addWidget(self.target_browse_btn)
         target_layout.addWidget(self.target_path_label)
@@ -85,9 +89,9 @@ class HomeTab(QWidget):
         right_layout.addLayout(target_layout)
 
         btn_layout = QHBoxLayout()
-        self.backup_btn = QPushButton(tr("备份"))
+        self.backup_btn = QPushButton()
         self.backup_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px 24px;")
-        self.restore_btn = QPushButton(tr("恢复"))
+        self.restore_btn = QPushButton()
         self.restore_btn.setStyleSheet("background-color: #FF5722; color: white; padding: 8px 24px;")
         btn_layout.addWidget(self.backup_btn)
         btn_layout.addWidget(self.restore_btn)
@@ -97,19 +101,18 @@ class HomeTab(QWidget):
         self.progress_bar = QProgressBar()
         right_layout.addWidget(self.progress_bar)
 
-        self.status_label = QLabel(tr("就绪"))
+        self.status_label = QLabel()
         right_layout.addWidget(self.status_label)
 
-        upper_layout.addWidget(right_group)
+        upper_layout.addWidget(self.right_group)
         splitter.addWidget(upper)
 
-        bottom_group = QGroupBox(tr("备份历史"))
-        bottom_layout = QVBoxLayout(bottom_group)
+        self.bottom_group = QGroupBox()
+        bottom_layout = QVBoxLayout(self.bottom_group)
         history_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.session_table = QTableWidget()
         self.session_table.setColumnCount(3)
-        self.session_table.setHorizontalHeaderLabels([tr("时间"), tr("备注"), tr("配置数")])
         self.session_table.horizontalHeader().setStretchLastSection(True)
         self.session_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.session_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -121,18 +124,17 @@ class HomeTab(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         self.detail_table = QTableWidget()
         self.detail_table.setColumnCount(4)
-        self.detail_table.setHorizontalHeaderLabels(["", tr("配置"), tr("版本"), tr("描述")])
         self.detail_table.horizontalHeader().setStretchLastSection(True)
         self.detail_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.detail_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.detail_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.restore_session_btn = QPushButton(tr("恢复此批次"))
+        self.restore_session_btn = QPushButton()
         self.restore_session_btn.setStyleSheet("background-color: #FF5722; color: white; padding: 6px 16px;")
 
         check_btn_layout = QHBoxLayout()
-        self.select_all_detail_btn = QPushButton(tr("全选"))
-        self.deselect_all_detail_btn = QPushButton(tr("取消全选"))
-        self.invert_detail_btn = QPushButton(tr("反选"))
+        self.select_all_detail_btn = QPushButton()
+        self.deselect_all_detail_btn = QPushButton()
+        self.invert_detail_btn = QPushButton()
         check_btn_layout.addWidget(self.select_all_detail_btn)
         check_btn_layout.addWidget(self.deselect_all_detail_btn)
         check_btn_layout.addWidget(self.invert_detail_btn)
@@ -146,7 +148,7 @@ class HomeTab(QWidget):
         history_splitter.addWidget(detail_widget)
         history_splitter.setSizes([400, 300])
         bottom_layout.addWidget(history_splitter)
-        splitter.addWidget(bottom_group)
+        splitter.addWidget(self.bottom_group)
 
         layout.addWidget(splitter)
 
@@ -162,6 +164,35 @@ class HomeTab(QWidget):
         self.invert_detail_btn.clicked.connect(self._invert_detail)
 
         self.refresh_configs()
+
+    def retranslate_ui(self):
+        self.scan_btn.setText(tr("扫描本机已装软件"))
+        self.select_all_btn.setText(tr("全选"))
+        self.deselect_all_btn.setText(tr("取消全选"))
+        self.left_group.setTitle(tr("配置规则"))
+        self.right_group.setTitle(tr("操作"))
+        self._note_label.setText(tr("备注:"))
+        self.note_input.setPlaceholderText(tr("备份备注（可选）"))
+        self._target_label.setText(tr("备份目标:"))
+        idx = self.target_combo.currentIndex()
+        self.target_combo.clear()
+        self.target_combo.addItems([tr("本地目录"), tr("ZIP 打包")])
+        if 0 <= idx < self.target_combo.count():
+            self.target_combo.setCurrentIndex(idx)
+        self.target_browse_btn.setText(tr("浏览..."))
+        self.backup_btn.setText(tr("备份"))
+        self.restore_btn.setText(tr("恢复"))
+        self.status_label.setText(tr("就绪"))
+        self.bottom_group.setTitle(tr("备份历史"))
+        self.session_table.setHorizontalHeaderLabels([tr("时间"), tr("备注"), tr("配置数")])
+        self.detail_table.setHorizontalHeaderLabels(["", tr("配置"), tr("版本"), tr("描述")])
+        self.restore_session_btn.setText(tr("恢复此批次"))
+        self.select_all_detail_btn.setText(tr("全选"))
+        self.deselect_all_detail_btn.setText(tr("取消全选"))
+        self.invert_detail_btn.setText(tr("反选"))
+
+    def _on_destroy(self):
+        off_locale_changed(self._retranslate_cb)
 
     def refresh_configs(self):
         self._configs.clear()
