@@ -29,7 +29,7 @@ def scan_installed(config_dirs: list[Path]) -> list[str]:
         name = rule.get("name", "")
         paths = rule.get("paths", [])
         for p in paths:
-            expanded = expand(p)
+            expanded = expand(p["path"] if isinstance(p, dict) else p)
             if expanded.exists():
                 logger.debug("  ✓ %s (%s)", name, expanded)
                 matched_names.append(name)

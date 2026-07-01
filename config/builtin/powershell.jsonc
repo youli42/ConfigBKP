@@ -5,8 +5,14 @@
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1",
-    "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShellISE_profile.ps1"
+    {
+      "path": "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1",
+      "desc": "PowerShell 配置文件"
+    },
+    {
+      "path": "%USERPROFILE%\\Documents\\PowerShell\\Microsoft.PowerShellISE_profile.ps1",
+      "desc": "ISE 配置文件"
+    }
   ],
   "parser_fields": {},
   "strategy": {

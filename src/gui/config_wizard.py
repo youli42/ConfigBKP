@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox,
     QStackedWidget, QGroupBox, QFormLayout, QFileDialog,
     QInputDialog, QMessageBox, QAbstractItemView, QDialog,
-    QDialogButtonBox, QGridLayout,
+    QDialogButtonBox, QGridLayout, QHeaderView,
 )
 from PySide6.QtCore import Qt
 
@@ -34,11 +34,19 @@ def serialize_to_jsonc(data: dict) -> str:
     return _json.dumps(obj, indent=2, ensure_ascii=False)
 
 
+def _normalize_path_entry(entry) -> dict:
+    if isinstance(entry, str):
+        return {"path": entry, "desc": ""}
+    if isinstance(entry, dict):
+        return {"path": entry.get("path", ""), "desc": entry.get("desc", "")}
+    return {"path": str(entry), "desc": ""}
+
+
 def _ensure_plat_dict(val, current_plat="windows") -> dict:
     if isinstance(val, dict):
-        return dict(val)
+        return {k: [_normalize_path_entry(e) for e in v] for k, v in val.items()}
     if isinstance(val, list):
-        return {current_plat: list(val)}
+        return {current_plat: [_normalize_path_entry(e) for e in val]}
     return {}
 
 
@@ -93,6 +101,35 @@ class FieldEditDialog(QDialog):
             QMessageBox.warning(self, "提示", "不支持数组索引路径")
             return
         self._result = (path, label)
+        self.accept()
+
+    def result(self) -> tuple[str, str]:
+        return self._result
+
+
+class PathEditDialog(QDialog):
+    def __init__(self, parent=None, path_str="", desc_str=""):
+        super().__init__(parent)
+        self.setWindowTitle("添加路径")
+        self._result = (path_str, desc_str)
+        layout = QFormLayout(self)
+        self.path_edit = QLineEdit(path_str)
+        self.path_edit.setPlaceholderText("如: %APPDATA%\\...\\config.json")
+        layout.addRow("路径:", self.path_edit)
+        self.desc_edit = QLineEdit(desc_str)
+        self.desc_edit.setPlaceholderText("如: VS Code 用户设置（选填）")
+        layout.addRow("描述:", self.desc_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self._accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _accept(self):
+        path = self.path_edit.text().strip()
+        if not path:
+            QMessageBox.warning(self, "提示", "路径不能为空")
+            return
+        self._result = (path, self.desc_edit.text().strip())
         self.accept()
 
     def result(self) -> tuple[str, str]:
@@ -186,7 +223,7 @@ class ConfigWizard(QWidget):
         self.wiz_scope_data = QCheckBox("备份程序数据")
         layout.addRow("", self.wiz_scope_data)
 
-    # ── Step 1: 路径配置（按平台切换显示）──
+    # ── Step 1: 路径配置（按平台切换显示，双列表格）──
     def _build_page1(self):
         page = self._page_widgets[1]
         layout = QVBoxLayout(page)
@@ -200,76 +237,71 @@ class ConfigWizard(QWidget):
         plat_layout.addStretch()
         layout.addLayout(plat_layout)
 
-        cols = QHBoxLayout()
-        left_grp = QGroupBox("配置文件路径")
-        left_layout = QVBoxLayout(left_grp)
-        left_grp.setMinimumWidth(200)
-        self.wiz_paths_list = QListWidget()
-        left_layout.addWidget(self.wiz_paths_list)
-        left_btn = QHBoxLayout()
-        self.wiz_path_add_btn = QPushButton("添加路径")
-        self.wiz_path_browse_btn = QPushButton("浏览目录...")
-        self.wiz_path_browse_file_btn = QPushButton("浏览文件...")
-        self.wiz_path_del_btn = QPushButton("删除")
-        left_btn.addWidget(self.wiz_path_add_btn)
-        left_btn.addWidget(self.wiz_path_browse_btn)
-        left_btn.addWidget(self.wiz_path_browse_file_btn)
-        left_btn.addWidget(self.wiz_path_del_btn)
-        left_layout.addLayout(left_btn)
+        left_grp, self.wiz_path_table = self._build_path_table("配置文件路径")
+        right_grp, self.wiz_data_table = self._build_path_table("程序数据路径")
+        layout.addWidget(left_grp)
+        layout.addWidget(right_grp)
 
-        right_grp = QGroupBox("程序数据路径")
-        right_grp.setMinimumWidth(200)
-        right_layout = QVBoxLayout(right_grp)
-        self.wiz_data_list = QListWidget()
-        right_layout.addWidget(self.wiz_data_list)
-        right_btn = QHBoxLayout()
-        self.wiz_data_add_btn = QPushButton("添加路径")
-        self.wiz_data_browse_btn = QPushButton("浏览目录...")
-        self.wiz_data_browse_file_btn = QPushButton("浏览文件...")
-        self.wiz_data_del_btn = QPushButton("删除")
-        right_btn.addWidget(self.wiz_data_add_btn)
-        right_btn.addWidget(self.wiz_data_browse_btn)
-        right_btn.addWidget(self.wiz_data_browse_file_btn)
-        right_btn.addWidget(self.wiz_data_del_btn)
-        right_layout.addLayout(right_btn)
+    def _build_path_table(self, title: str) -> tuple:
+        grp = QGroupBox(title)
+        grp.setMinimumWidth(200)
+        layout = QVBoxLayout(grp)
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels(["描述", "路径"])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        layout.addWidget(table)
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("添加路径")
+        browse_btn = QPushButton("浏览目录...")
+        browse_file_btn = QPushButton("浏览文件...")
+        del_btn = QPushButton("删除")
+        add_btn.clicked.connect(lambda: self._add_path_entry(table))
+        browse_btn.clicked.connect(lambda: self._browse_dir_entry(table))
+        browse_file_btn.clicked.connect(lambda: self._browse_file_entry(table))
+        del_btn.clicked.connect(lambda: self._del_table_row(table))
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(browse_btn)
+        btn_row.addWidget(browse_file_btn)
+        btn_row.addWidget(del_btn)
+        layout.addLayout(btn_row)
+        return grp, table
 
-        cols.addWidget(left_grp)
-        cols.addWidget(right_grp)
-        layout.addLayout(cols)
+    def _add_path_entry(self, table: QTableWidget):
+        dlg = PathEditDialog(self)
+        if dlg.exec():
+            path, desc = dlg.result()
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(desc))
+            table.setItem(row, 1, QTableWidgetItem(path))
 
-        self.wiz_path_add_btn.clicked.connect(lambda: self._add_path_to(self.wiz_paths_list))
-        self.wiz_path_browse_btn.clicked.connect(lambda: self._browse_dir_to(self.wiz_paths_list, "选择配置文件目录"))
-        self.wiz_path_browse_file_btn.clicked.connect(lambda: self._browse_file_to(self.wiz_paths_list, "选择配置文件"))
-        self.wiz_path_del_btn.clicked.connect(lambda: self._del_selected(self.wiz_paths_list))
-        self.wiz_data_add_btn.clicked.connect(lambda: self._add_path_to(self.wiz_data_list))
-        self.wiz_data_browse_btn.clicked.connect(lambda: self._browse_dir_to(self.wiz_data_list, "选择程序数据目录"))
-        self.wiz_data_browse_file_btn.clicked.connect(lambda: self._browse_file_to(self.wiz_data_list, "选择程序数据文件"))
-        self.wiz_data_del_btn.clicked.connect(lambda: self._del_selected(self.wiz_data_list))
+    def _browse_dir_entry(self, table: QTableWidget):
+        folder = QFileDialog.getExistingDirectory(self, "选择目录")
+        if folder:
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(""))
+            table.setItem(row, 1, QTableWidgetItem(str(Path(folder))))
+
+    def _browse_file_entry(self, table: QTableWidget):
+        f = QFileDialog.getOpenFileName(self, "选择文件")
+        if f and f[0]:
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(""))
+            table.setItem(row, 1, QTableWidgetItem(str(Path(f[0]))))
+
+    def _del_table_row(self, table: QTableWidget):
+        row = table.currentRow()
+        if row >= 0:
+            table.removeRow(row)
 
     def _on_path_plat_changed(self):
         self._collect_current()
         self._sync_path_lists()
-
-    def _add_path_to(self, lst: QListWidget):
-        text, ok = QInputDialog.getText(self, "添加路径", "输入文件或目录路径：\n支持 %APPDATA% 等环境变量",
-                                        text="%APPDATA%\\")
-        if ok and text.strip():
-            lst.addItem(text.strip())
-
-    def _browse_dir_to(self, lst: QListWidget, title: str):
-        folder = QFileDialog.getExistingDirectory(self, title)
-        if folder:
-            lst.addItem(str(Path(folder)))
-
-    def _browse_file_to(self, lst: QListWidget, title: str):
-        f = QFileDialog.getOpenFileName(self, title)
-        if f and f[0]:
-            lst.addItem(str(Path(f[0])))
-
-    def _del_selected(self, lst: QListWidget):
-        row = lst.currentRow()
-        if row >= 0:
-            lst.takeItem(row)
 
     # ── Step 2: 解析字段 ──
     def _build_page2(self):
@@ -376,14 +408,8 @@ class ConfigWizard(QWidget):
             }
         elif idx == 1:
             plat = self.wiz_path_plat.currentText()
-            paths = []
-            for i in range(self.wiz_paths_list.count()):
-                paths.append(self.wiz_paths_list.item(i).text())
-            self._data["paths"][plat] = paths
-            data_paths = []
-            for i in range(self.wiz_data_list.count()):
-                data_paths.append(self.wiz_data_list.item(i).text())
-            self._data["data_paths"][plat] = data_paths
+            self._data["paths"][plat] = self._read_path_table(self.wiz_path_table)
+            self._data["data_paths"][plat] = self._read_path_table(self.wiz_data_table)
         elif idx == 2:
             fields = {}
             for r in range(self.wiz_fields_table.rowCount()):
@@ -463,14 +489,40 @@ class ConfigWizard(QWidget):
         else:
             self._update_step(0)
 
+    @staticmethod
+    def _read_path_table(table: QTableWidget) -> list[dict]:
+        entries = []
+        for r in range(table.rowCount()):
+            desc_item = table.item(r, 0)
+            path_item = table.item(r, 1)
+            entries.append({
+                "path": path_item.text() if path_item else "",
+                "desc": desc_item.text() if desc_item else "",
+            })
+        return entries
+
     def _sync_path_lists(self):
         plat = self.wiz_path_plat.currentText()
-        self.wiz_paths_list.clear()
-        for p in self._data.get("paths", {}).get(plat, []):
-            self.wiz_paths_list.addItem(p)
-        self.wiz_data_list.clear()
-        for p in self._data.get("data_paths", {}).get(plat, []):
-            self.wiz_data_list.addItem(p)
+        self._fill_path_table(self.wiz_path_table, self._data.get("paths", {}).get(plat, []))
+        self._fill_path_table(self.wiz_data_table, self._data.get("data_paths", {}).get(plat, []))
+
+    @staticmethod
+    def _fill_path_table(table: QTableWidget, entries: list):
+        table.setRowCount(0)
+        for entry in entries:
+            if isinstance(entry, str):
+                path, desc = entry, ""
+            elif isinstance(entry, dict):
+                path = entry.get("path", "")
+                desc = entry.get("desc", "")
+            else:
+                continue
+            r = table.rowCount()
+            table.insertRow(r)
+            desc_item = QTableWidgetItem(desc)
+            desc_item.setToolTip(desc)
+            table.setItem(r, 0, desc_item)
+            table.setItem(r, 1, QTableWidgetItem(path))
 
     def get_jsonc(self) -> str:
         self._collect_current()

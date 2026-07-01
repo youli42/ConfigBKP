@@ -5,10 +5,22 @@
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%APPDATA%\\Code\\User\\settings.json",
-    "%APPDATA%\\Code\\User\\keybindings.json",
-    "%APPDATA%\\Code\\User\\snippets\\",
-    "%APPDATA%\\Code\\User\\extensions.json"
+    {
+      "path": "%APPDATA%\\Code\\User\\settings.json",
+      "desc": "用户设置"
+    },
+    {
+      "path": "%APPDATA%\\Code\\User\\keybindings.json",
+      "desc": "快捷键绑定"
+    },
+    {
+      "path": "%APPDATA%\\Code\\User\\snippets\\",
+      "desc": "用户代码片段"
+    },
+    {
+      "path": "%APPDATA%\\Code\\User\\extensions.json",
+      "desc": "已安装扩展列表"
+    }
   ],
   "parser_fields": {},
   "strategy": {

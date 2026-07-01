@@ -175,7 +175,9 @@ class ConfigTab(QWidget):
         cb.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
         self.rule_table.setItem(r, 1, cb)
 
-        self.rule_table.setItem(r, 2, QTableWidgetItem(desc))
+        desc_item = QTableWidgetItem(desc)
+        desc_item.setToolTip(desc)
+        self.rule_table.setItem(r, 2, desc_item)
         self._rule_paths[r] = fpath
 
     def _on_table_selected(self):

@@ -28,5 +28,8 @@ Thumbs.db
 # User config
 config/user/
 
+# OpenCode 工作文件
+.omo/
+
 # 程序缓存
 backups/

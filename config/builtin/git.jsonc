@@ -5,8 +5,14 @@
   "enabled": true,
   "platform": "cross-platform",
   "paths": [
-    "%USERPROFILE%\\.gitconfig",
-    "%USERPROFILE%\\.gitignore_global"
+    {
+      "path": "%USERPROFILE%\\.gitconfig",
+      "desc": "Git 全局配置"
+    },
+    {
+      "path": "%USERPROFILE%\\.gitignore_global",
+      "desc": "全局忽略规则"
+    }
   ],
   "parser_fields": {},
   "strategy": {

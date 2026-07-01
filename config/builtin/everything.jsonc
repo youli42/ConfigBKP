@@ -5,7 +5,10 @@
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%APPDATA%\\Everything\\Everything.ini"
+    {
+      "path": "%APPDATA%\\Everything\\Everything.ini",
+      "desc": "Everything 主配置"
+    }
   ],
   "parser_fields": {},
   "strategy": {

@@ -5,7 +5,10 @@
   "enabled": true,
   "platform": "windows",
   "paths": [
-    "%USERPROFILE%\\.oh-my-posh.omp.json"
+    {
+      "path": "%USERPROFILE%\\.oh-my-posh.omp.json",
+      "desc": "Oh My Posh 主题"
+    }
   ],
   "parser_fields": {
     "theme": "主题名称",
