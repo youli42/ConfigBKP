@@ -6,9 +6,10 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox,
     QStackedWidget, QGroupBox, QFormLayout, QFileDialog,
     QInputDialog, QMessageBox, QAbstractItemView, QDialog,
-    QDialogButtonBox, QGridLayout, QHeaderView,
+    QDialogButtonBox, QGridLayout,
 )
 from PySide6.QtCore import Qt
+from src.utils.i18n import tr, on_locale_changed, off_locale_changed
 
 
 def serialize_to_jsonc(data: dict) -> str:
@@ -75,16 +76,16 @@ def parse_to_form_data(cfg: dict) -> dict:
 class FieldEditDialog(QDialog):
     def __init__(self, parent=None, field_path="", label=""):
         super().__init__(parent)
-        self.setWindowTitle("添加解析字段")
+        self.setWindowTitle(tr("添加解析字段"))
         self._result = (field_path, label)
         layout = QGridLayout(self)
-        layout.addWidget(QLabel("字段路径:"), 0, 0)
+        layout.addWidget(QLabel(tr("字段路径:")), 0, 0)
         self.path_edit = QLineEdit(field_path)
-        self.path_edit.setPlaceholderText("如: editor.fontSize")
+        self.path_edit.setPlaceholderText(tr("如: editor.fontSize"))
         layout.addWidget(self.path_edit, 0, 1)
-        layout.addWidget(QLabel("显示标签:"), 1, 0)
+        layout.addWidget(QLabel(tr("显示标签:")), 1, 0)
         self.label_edit = QLineEdit(label)
-        self.label_edit.setPlaceholderText("如: 字号")
+        self.label_edit.setPlaceholderText(tr("如: 字号"))
         layout.addWidget(self.label_edit, 1, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._accept)
@@ -95,10 +96,10 @@ class FieldEditDialog(QDialog):
         path = self.path_edit.text().strip()
         label = self.label_edit.text().strip()
         if not path:
-            QMessageBox.warning(self, "提示", "字段路径不能为空")
+            QMessageBox.warning(self, tr("提示"), tr("字段路径不能为空"))
             return
         if "[" in path:
-            QMessageBox.warning(self, "提示", "不支持数组索引路径")
+            QMessageBox.warning(self, tr("提示"), tr("不支持数组索引路径"))
             return
         self._result = (path, label)
         self.accept()
@@ -110,15 +111,15 @@ class FieldEditDialog(QDialog):
 class PathEditDialog(QDialog):
     def __init__(self, parent=None, path_str="", desc_str=""):
         super().__init__(parent)
-        self.setWindowTitle("添加路径")
+        self.setWindowTitle(tr("添加路径"))
         self._result = (path_str, desc_str)
         layout = QFormLayout(self)
         self.path_edit = QLineEdit(path_str)
-        self.path_edit.setPlaceholderText("如: %APPDATA%\\...\\config.json")
-        layout.addRow("路径:", self.path_edit)
+        self.path_edit.setPlaceholderText(tr("如: %APPDATA%\\...\\config.json"))
+        layout.addRow(tr("路径:"), self.path_edit)
         self.desc_edit = QLineEdit(desc_str)
-        self.desc_edit.setPlaceholderText("如: VS Code 用户设置（选填）")
-        layout.addRow("描述:", self.desc_edit)
+        self.desc_edit.setPlaceholderText(tr("如: VS Code 用户设置（选填）"))
+        layout.addRow(tr("描述:"), self.desc_edit)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
@@ -127,7 +128,7 @@ class PathEditDialog(QDialog):
     def _accept(self):
         path = self.path_edit.text().strip()
         if not path:
-            QMessageBox.warning(self, "提示", "路径不能为空")
+            QMessageBox.warning(self, tr("提示"), tr("路径不能为空"))
             return
         self._result = (path, self.desc_edit.text().strip())
         self.accept()
@@ -141,24 +142,28 @@ class ConfigWizard(QWidget):
         super().__init__(parent)
         self._data: dict = parse_to_form_data({})
         self._setup_ui()
+        self.retranslate_ui()
+        self._retranslate_cb = self.retranslate_ui
+        on_locale_changed(self._retranslate_cb)
+        self.destroyed.connect(self._on_destroy)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
         mode_bar = QHBoxLayout()
-        self.mode_label = QLabel("向导模式")
+        self.mode_label = QLabel()
         mode_bar.addWidget(self.mode_label)
         mode_bar.addStretch()
         layout.addLayout(mode_bar)
 
         main_split = QHBoxLayout()
 
-        step_group = QGroupBox("步骤")
-        step_layout = QVBoxLayout(step_group)
+        self._step_group = QGroupBox()
+        step_layout = QVBoxLayout(self._step_group)
         self._step_btns = []
-        step_names = ["基本信息", "路径配置", "解析字段", "备份策略"]
-        for i, s in enumerate(step_names):
-            btn = QPushButton(f"  ○ {s}")
+        self._step_names = ["基本信息", "路径配置", "解析字段", "备份策略"]
+        for i, s in enumerate(self._step_names):
+            btn = QPushButton(f"  \u25cb {s}")
             btn.setFlat(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("QPushButton { text-align: left; padding: 4px 8px; border: none; } "
@@ -167,7 +172,7 @@ class ConfigWizard(QWidget):
             self._step_btns.append(btn)
             step_layout.addWidget(btn)
         step_layout.addStretch()
-        main_split.addWidget(step_group)
+        main_split.addWidget(self._step_group)
 
         self._stack = QStackedWidget()
         self._page_widgets = []
@@ -185,9 +190,9 @@ class ConfigWizard(QWidget):
         layout.addLayout(main_split)
 
         nav_layout = QHBoxLayout()
-        self.prev_btn = QPushButton("上一步")
-        self.next_btn = QPushButton("下一步")
-        self.finish_btn = QPushButton("完成")
+        self.prev_btn = QPushButton()
+        self.next_btn = QPushButton()
+        self.finish_btn = QPushButton()
         self.finish_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 6px 16px;")
         nav_layout.addWidget(self.prev_btn)
         nav_layout.addWidget(self.next_btn)
@@ -201,26 +206,26 @@ class ConfigWizard(QWidget):
 
         self._update_step(0)
 
-    # ── Step 0: 基本信息 ──
     def _build_page0(self):
         page = self._page_widgets[0]
         layout = QFormLayout(page)
         self.wiz_name = QLineEdit()
-        self.wiz_name.setPlaceholderText("必填，如: VS Code")
-        layout.addRow("名称:", self.wiz_name)
+        self._wiz_name_label = QLabel()
+        layout.addRow(self._wiz_name_label, self.wiz_name)
         self.wiz_desc = QLineEdit()
-        self.wiz_desc.setPlaceholderText("选填，如: Visual Studio Code 编辑器配置")
-        layout.addRow("描述:", self.wiz_desc)
+        self._wiz_desc_label = QLabel()
+        layout.addRow(self._wiz_desc_label, self.wiz_desc)
         self.wiz_platform = QComboBox()
         self.wiz_platform.addItems(["windows", "macos", "linux", "cross-platform"])
-        layout.addRow("平台:", self.wiz_platform)
-        self.wiz_enabled = QCheckBox("启用")
+        self._wiz_platform_label = QLabel()
+        layout.addRow(self._wiz_platform_label, self.wiz_platform)
+        self.wiz_enabled = QCheckBox()
         self.wiz_enabled.setChecked(True)
         layout.addRow("", self.wiz_enabled)
-        self.wiz_scope_config = QCheckBox("备份配置文件")
+        self.wiz_scope_config = QCheckBox(tr("备份配置文件"))
         self.wiz_scope_config.setChecked(True)
         layout.addRow("", self.wiz_scope_config)
-        self.wiz_scope_data = QCheckBox("备份程序数据")
+        self.wiz_scope_data = QCheckBox(tr("备份程序数据"))
         layout.addRow("", self.wiz_scope_data)
 
     # ── Step 1: 路径配置（按平台切换显示，双列表格）──
@@ -229,7 +234,7 @@ class ConfigWizard(QWidget):
         layout = QVBoxLayout(page)
 
         plat_layout = QHBoxLayout()
-        plat_layout.addWidget(QLabel("平台:"))
+        plat_layout.addWidget(QLabel(tr("平台:")))
         self.wiz_path_plat = QComboBox()
         self.wiz_path_plat.addItems(["windows", "macos", "linux"])
         self.wiz_path_plat.currentIndexChanged.connect(self._on_path_plat_changed)
@@ -237,36 +242,41 @@ class ConfigWizard(QWidget):
         plat_layout.addStretch()
         layout.addLayout(plat_layout)
 
-        left_grp, self.wiz_path_table = self._build_path_table("配置文件路径")
-        right_grp, self.wiz_data_table = self._build_path_table("程序数据路径")
-        layout.addWidget(left_grp)
-        layout.addWidget(right_grp)
+        self._path_config_grp, self.wiz_path_table = self._build_path_table(tr("配置文件路径"))
+        self._path_data_grp, self.wiz_data_table = self._build_path_table(tr("程序数据路径"))
+        layout.addWidget(self._path_config_grp)
+        layout.addWidget(self._path_data_grp)
 
     def _build_path_table(self, title: str) -> tuple:
         grp = QGroupBox(title)
         grp.setMinimumWidth(200)
         layout = QVBoxLayout(grp)
         table = QTableWidget(0, 2)
-        table.setHorizontalHeaderLabels(["描述", "路径"])
+        table.setHorizontalHeaderLabels([tr("描述"), tr("路径")])
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(table)
         btn_row = QHBoxLayout()
-        add_btn = QPushButton("添加路径")
-        browse_btn = QPushButton("浏览目录...")
-        browse_file_btn = QPushButton("浏览文件...")
-        del_btn = QPushButton("删除")
+        add_btn = QPushButton(tr("添加路径"))
+        browse_dir_btn = QPushButton(tr("浏览目录..."))
+        browse_file_btn = QPushButton(tr("浏览文件..."))
+        del_btn = QPushButton(tr("删除"))
         add_btn.clicked.connect(lambda: self._add_path_entry(table))
-        browse_btn.clicked.connect(lambda: self._browse_dir_entry(table))
+        browse_dir_btn.clicked.connect(lambda: self._browse_dir_entry(table))
         browse_file_btn.clicked.connect(lambda: self._browse_file_entry(table))
         del_btn.clicked.connect(lambda: self._del_table_row(table))
         btn_row.addWidget(add_btn)
-        btn_row.addWidget(browse_btn)
+        btn_row.addWidget(browse_dir_btn)
         btn_row.addWidget(browse_file_btn)
         btn_row.addWidget(del_btn)
+        btn_row.addStretch()
         layout.addLayout(btn_row)
+        # Register buttons for retranslation support
+        if not hasattr(self, '_path_table_buttons'):
+            self._path_table_buttons = []
+        self._path_table_buttons.append((add_btn, browse_dir_btn, browse_file_btn, del_btn))
         return grp, table
 
     def _add_path_entry(self, table: QTableWidget):
@@ -279,7 +289,7 @@ class ConfigWizard(QWidget):
             table.setItem(row, 1, QTableWidgetItem(path))
 
     def _browse_dir_entry(self, table: QTableWidget):
-        folder = QFileDialog.getExistingDirectory(self, "选择目录")
+        folder = QFileDialog.getExistingDirectory(self, tr("选择目录"))
         if folder:
             row = table.rowCount()
             table.insertRow(row)
@@ -287,7 +297,7 @@ class ConfigWizard(QWidget):
             table.setItem(row, 1, QTableWidgetItem(str(Path(folder))))
 
     def _browse_file_entry(self, table: QTableWidget):
-        f = QFileDialog.getOpenFileName(self, "选择文件")
+        f = QFileDialog.getOpenFileName(self, tr("选择文件"))
         if f and f[0]:
             row = table.rowCount()
             table.insertRow(row)
@@ -303,18 +313,16 @@ class ConfigWizard(QWidget):
         self._collect_current()
         self._sync_path_lists()
 
-    # ── Step 2: 解析字段 ──
     def _build_page2(self):
         page = self._page_widgets[2]
         layout = QVBoxLayout(page)
         self.wiz_fields_table = QTableWidget(0, 2)
-        self.wiz_fields_table.setHorizontalHeaderLabels(["字段路径", "显示标签"])
         self.wiz_fields_table.horizontalHeader().setStretchLastSection(True)
         self.wiz_fields_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         layout.addWidget(self.wiz_fields_table)
         btn_row = QHBoxLayout()
-        self.wiz_field_add_btn = QPushButton("添加字段")
-        self.wiz_field_del_btn = QPushButton("删除字段")
+        self.wiz_field_add_btn = QPushButton()
+        self.wiz_field_del_btn = QPushButton()
         btn_row.addWidget(self.wiz_field_add_btn)
         btn_row.addWidget(self.wiz_field_del_btn)
         btn_row.addStretch()
@@ -336,23 +344,25 @@ class ConfigWizard(QWidget):
         if row >= 0:
             self.wiz_fields_table.removeRow(row)
 
-    # ── Step 3: 备份策略 ──
     def _build_page3(self):
         page = self._page_widgets[3]
         layout = QFormLayout(page)
         self.wiz_strat_type = QComboBox()
         self.wiz_strat_type.addItems(["incremental", "full"])
-        layout.addRow("备份类型:", self.wiz_strat_type)
+        self._wiz_strat_type_label = QLabel()
+        layout.addRow(self._wiz_strat_type_label, self.wiz_strat_type)
         self.wiz_strat_max = QSpinBox()
         self.wiz_strat_max.setMinimum(1)
         self.wiz_strat_max.setMaximum(99)
         self.wiz_strat_max.setValue(10)
-        layout.addRow("最大版本数:", self.wiz_strat_max)
+        self._wiz_strat_max_label = QLabel()
+        layout.addRow(self._wiz_strat_max_label, self.wiz_strat_max)
         self.wiz_ignore_list = QListWidget()
-        layout.addRow("忽略模式:", self.wiz_ignore_list)
+        self._wiz_ignore_label = QLabel()
+        layout.addRow(self._wiz_ignore_label, self.wiz_ignore_list)
         ig_btn_row = QHBoxLayout()
-        self.wiz_ignore_add_btn = QPushButton("添加")
-        self.wiz_ignore_del_btn = QPushButton("删除")
+        self.wiz_ignore_add_btn = QPushButton()
+        self.wiz_ignore_del_btn = QPushButton()
         ig_btn_row.addWidget(self.wiz_ignore_add_btn)
         ig_btn_row.addWidget(self.wiz_ignore_del_btn)
         ig_btn_row.addStretch()
@@ -361,7 +371,7 @@ class ConfigWizard(QWidget):
         self.wiz_ignore_del_btn.clicked.connect(self._del_ignore)
 
     def _add_ignore(self):
-        text, ok = QInputDialog.getText(self, "添加忽略模式", "Glob 模式：\n如 *.log 或 __pycache__/")
+        text, ok = QInputDialog.getText(self, tr("添加忽略模式"), tr("Glob 模式：\n如 *.log 或 __pycache__/"))
         if ok and text.strip():
             self.wiz_ignore_list.addItem(text.strip())
 
@@ -370,12 +380,51 @@ class ConfigWizard(QWidget):
         if row >= 0:
             self.wiz_ignore_list.takeItem(row)
 
-    # ── 导航 ──
+    def retranslate_ui(self):
+        self.mode_label.setText(tr("向导模式"))
+        self._step_group.setTitle(tr("步骤"))
+        current_idx = self._stack.currentIndex() if hasattr(self, '_stack') else 0
+        for i, s in enumerate(self._step_names):
+            translated = tr(s)
+            bullet = "\u25cf" if i == current_idx else "\u25cb"
+            self._step_btns[i].setText(f"  {bullet} {translated}")
+        self._wiz_name_label.setText(tr("名称:"))
+        self.wiz_name.setPlaceholderText(tr("必填，如: VS Code"))
+        self._wiz_desc_label.setText(tr("描述:"))
+        self.wiz_desc.setPlaceholderText(tr("选填，如: Visual Studio Code 编辑器配置"))
+        self._wiz_platform_label.setText(tr("平台:"))
+        self.wiz_enabled.setText(tr("启用"))
+        # Update all path table buttons
+        if hasattr(self, '_path_table_buttons'):
+            for add_btn, browse_dir_btn, browse_file_btn, del_btn in self._path_table_buttons:
+                add_btn.setText(tr("添加路径"))
+                browse_dir_btn.setText(tr("浏览目录..."))
+                browse_file_btn.setText(tr("浏览文件..."))
+                del_btn.setText(tr("删除"))
+        self.wiz_fields_table.setHorizontalHeaderLabels([tr("字段路径"), tr("显示标签")])
+        self.wiz_field_add_btn.setText(tr("添加字段"))
+        self.wiz_field_del_btn.setText(tr("删除字段"))
+        self._wiz_strat_type_label.setText(tr("备份类型:"))
+        self._wiz_strat_max_label.setText(tr("最大版本数:"))
+        self._wiz_ignore_label.setText(tr("忽略模式:"))
+        self.wiz_ignore_add_btn.setText(tr("添加"))
+        self.wiz_ignore_del_btn.setText(tr("删除"))
+        self.wiz_path_table.setHorizontalHeaderLabels([tr("描述"), tr("路径")])
+        self.wiz_data_table.setHorizontalHeaderLabels([tr("描述"), tr("路径")])
+        self._path_config_grp.setTitle(tr("配置文件路径"))
+        self._path_data_grp.setTitle(tr("程序数据路径"))
+        self.prev_btn.setText(tr("上一步"))
+        self.next_btn.setText(tr("下一步"))
+        self.finish_btn.setText(tr("完成"))
+
+    def _on_destroy(self):
+        off_locale_changed(self._retranslate_cb)
+
     def _update_step(self, idx: int):
         for i, btn in enumerate(self._step_btns):
             text = btn.text().strip()
-            label = text.lstrip("○● ").strip()
-            btn.setText(f"  {'●' if i == idx else '○'} {label}")
+            label = text.lstrip("\u25cb\u25cf ").strip()
+            btn.setText(f"  {'\u25cf' if i == idx else '\u25cb'} {label}")
         self._stack.setCurrentIndex(idx)
         self.prev_btn.setEnabled(idx > 0)
         self.next_btn.setVisible(idx < 3)
@@ -429,7 +478,7 @@ class ConfigWizard(QWidget):
     def _finish(self):
         self._collect_current()
         if not self._data.get("name"):
-            QMessageBox.warning(self, "提示", "名称不能为空")
+            QMessageBox.warning(self, tr("提示"), tr("名称不能为空"))
             has_dp = any(self._data.get("data_paths", {}).get(p, []) for p in ("windows", "macos", "linux"))
             self._update_step(0 if not has_dp else 1)
             return

@@ -6,8 +6,10 @@ import argparse
 import subprocess
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QSettings
 from src.gui.main_window import MainWindow
 from src.cli import run_silent_backup
+from src.utils.i18n import install as install_locale
 
 
 logging.basicConfig(
@@ -43,6 +45,10 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("WinConfigBKP")
     app.setOrganizationName("WinConfigBKP")
+
+    settings = QSettings()
+    locale = settings.value("language", "zh_CN")
+    install_locale(locale)
 
     window = MainWindow()
     window.show()

@@ -10,6 +10,7 @@ from src.storage.base import StorageBackend, BackupResult
 from src.core.manifest_manager import ManifestManager
 from src.core.config_parser import generate_description
 from src.utils.path_expander import expand
+from src.utils.i18n import tr
 
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ class BackupWorker(QRunnable):
             ts = time.time_ns()
             backup_id = datetime.fromtimestamp(ts / 1e9, tz=timezone.utc).strftime("%Y%m%d-%H%M%S") + f"-{ts % 10**9:09d}"
 
-            self.signals.message.emit("正在计算文件哈希...")
+            self.signals.message.emit(tr("正在计算文件哈希..."))
             self.signals.progress.emit(10)
 
             manifest_mgr = ManifestManager(self.manifest_dir)
@@ -56,13 +57,13 @@ class BackupWorker(QRunnable):
 
             if not changed:
                 logger.debug("[%s] 无文件变化，跳过备份", config_name)
-                self.signals.message.emit("无文件变化，跳过备份")
+                self.signals.message.emit(tr("无文件变化，跳过备份"))
                 self.signals.progress.emit(100)
                 self.signals.done.emit(BackupResult(backup_id, config_name, 0, 0, self.note))
                 return
 
             logger.debug("[%s] %d 文件变化", config_name, len(changed))
-            self.signals.message.emit(f"发现 {len(changed)} 个文件变化，正在备份...")
+            self.signals.message.emit(tr("发现 {} 个文件变化，正在备份...").format(len(changed)))
             self.signals.progress.emit(30)
 
             changed_files = {}
@@ -76,7 +77,7 @@ class BackupWorker(QRunnable):
                 config_name, self.config, changed_files
             )
 
-            self.signals.message.emit("正在写入备份...")
+            self.signals.message.emit(tr("正在写入备份..."))
             self.signals.progress.emit(60)
             result = self.storage.save(
                 backup_id=backup_id,
@@ -91,7 +92,7 @@ class BackupWorker(QRunnable):
             self._prune_versions(config_name)
 
             self.signals.progress.emit(100)
-            self.signals.message.emit("备份完成")
+            self.signals.message.emit(tr("备份完成"))
             self.signals.done.emit(result)
 
         except Exception as e:
@@ -172,22 +173,22 @@ class BatchBackupWorker(QRunnable):
         for idx, cfg in enumerate(self.configs):
             name = cfg["name"]
             self._config_index[name] = cfg
-            self.signals.message.emit(f"[{idx+1}/{total}] 正在收集 {name} 文件...")
+            self.signals.message.emit(tr("[{}/{}] 正在收集 {} 文件...").format(idx+1, total, name))
             try:
                 files, file_sources = self._collect_files_for_config(cfg)
             except Exception as e:
                 logger.debug("[%s] 文件收集失败: %s", name, e)
                 summary.errors.append((name, f"文件收集失败: {e}"))
-                self.signals.message.emit(f"[{idx+1}/{total}] {name}: 收集失败 - {e}")
+                self.signals.message.emit(tr("[{}/{}] {}: 收集失败 - {}").format(idx+1, total, name, e))
                 self.signals.progress.emit(int((idx + 1) / total * 100))
                 continue
 
-            self.signals.message.emit(f"[{idx+1}/{total}] 正在处理 {name}...")
+            self.signals.message.emit(tr("[{}/{}] 正在处理 {}...").format(idx+1, total, name))
             try:
                 if not files:
                     logger.debug("[%s] 源文件路径不存在，跳过", name)
                     summary.skipped.append(name)
-                    self.signals.message.emit(f"[{idx+1}/{total}] {name}: 无文件，已跳过")
+                    self.signals.message.emit(tr("[{}/{}] {}: 无文件，已跳过").format(idx+1, total, name))
                     self.signals.progress.emit(int((idx + 1) / total * 100))
                     continue
                 ts = time.time_ns()
@@ -198,7 +199,7 @@ class BatchBackupWorker(QRunnable):
                 if not changed:
                     logger.debug("[%s] 文件无变化，跳过", name)
                     summary.skipped.append(name)
-                    self.signals.message.emit(f"[{idx+1}/{total}] {name}: 无变化，已跳过")
+                    self.signals.message.emit(tr("[{}/{}] {}: 无变化，已跳过").format(idx+1, total, name))
                     self.signals.progress.emit(int((idx + 1) / total * 100))
                     continue
                 changed_files = {rel: fp for rel, fp in files.items() if fp in changed}
@@ -212,11 +213,11 @@ class BatchBackupWorker(QRunnable):
                 manifest_mgr.update_manifest(changed_files, backup_id)
                 self._prune_versions(name)
                 summary.results.append(result)
-                self.signals.message.emit(f"[{idx+1}/{total}] {name}: 备份完成 ({result.files_count} 文件)")
+                self.signals.message.emit(tr("[{}/{}] {}: 备份完成 ({} 文件)").format(idx+1, total, name, result.files_count))
             except Exception as e:
                 logger.debug("[%s] 备份失败: %s", name, e)
                 summary.errors.append((name, str(e)))
-                self.signals.message.emit(f"[{idx+1}/{total}] {name}: 失败 - {e}")
+                self.signals.message.emit(tr("[{}/{}] {}: 失败 - {}").format(idx+1, total, name, e))
             self.signals.progress.emit(int((idx + 1) / total * 100))
         logger.debug("批量备份结束: %d 成功, %d 跳过, %d 失败",
                      len(summary.results), len(summary.skipped), len(summary.errors))
