@@ -57,7 +57,7 @@ python main.py
 .\build.ps1
 ```
 
-打包后的 exe 位于 `dist/WinConfigBKP-1.0.0/`，双击运行或放在 U 盘便携使用。
+打包后的 exe 位于 `dist/WinConfigBKP-1.5.0/`，双击运行或放在 U 盘便携使用。
 
 ## 详细文档
 

@@ -94,7 +94,7 @@ class SettingsTab(QWidget):
 
         self.about_group = QGroupBox()
         about_layout = QVBoxLayout(self.about_group)
-        about_layout.addWidget(QLabel("WinConfigBKP v1.0.0"))
+        about_layout.addWidget(QLabel("WinConfigBKP v1.5.0"))
         self._about_desc_label = QLabel()
         about_layout.addWidget(self._about_desc_label)
         self._about_path_label = QLabel()

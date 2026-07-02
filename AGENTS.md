@@ -187,7 +187,7 @@ python main.py
 
 ## 打包
 
-`build.ps1` → PyInstaller `--onedir --windowed`，自动复制 `config/` 和 `lang/` 到 exe 目录实现便携。spec 文件 `WinConfigBKP-1.0.0.spec` 可手动调参。
+`build.ps1` → PyInstaller `--onedir --windowed`，自动复制 `config/` 和 `lang/` 到 exe 目录实现便携。spec 文件 `WinConfigBKP-1.5.0.spec` 可手动调参。
 
 ## 补充文档
 

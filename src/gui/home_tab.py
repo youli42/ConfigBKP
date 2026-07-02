@@ -38,16 +38,6 @@ class HomeTab(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
-        top_bar = QHBoxLayout()
-        self.scan_btn = QPushButton()
-        self.select_all_btn = QPushButton()
-        self.deselect_all_btn = QPushButton()
-        top_bar.addWidget(self.scan_btn)
-        top_bar.addWidget(self.select_all_btn)
-        top_bar.addWidget(self.deselect_all_btn)
-        top_bar.addStretch()
-        layout.addLayout(top_bar)
-
         splitter = QSplitter(Qt.Orientation.Vertical)
 
         upper = QWidget()
@@ -56,6 +46,15 @@ class HomeTab(QWidget):
 
         self.left_group = QGroupBox()
         left_layout = QVBoxLayout(self.left_group)
+        btn_row = QHBoxLayout()
+        self.scan_btn = QPushButton()
+        self.select_all_btn = QPushButton()
+        self.deselect_all_btn = QPushButton()
+        btn_row.addWidget(self.scan_btn)
+        btn_row.addWidget(self.select_all_btn)
+        btn_row.addWidget(self.deselect_all_btn)
+        btn_row.addStretch()
+        left_layout.addLayout(btn_row)
         self.config_table = QTableWidget()
         self.config_table.setColumnCount(4)
         self.config_table.setHorizontalHeaderLabels(["", tr("名称"), tr("描述"), tr("范围")])

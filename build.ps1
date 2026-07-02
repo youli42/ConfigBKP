@@ -6,7 +6,7 @@ $IconPath = Join-Path $ProjectRoot "resources\icons\app.ico"
 
 $PyInstaller = "pyinstaller"
 
-$Version = "1.0.0"
+$Version = "1.5.0"
 $OutName = "WinConfigBKP-$Version"
 
 Write-Host "正在打包 WinConfigBKP v$Version ..." -ForegroundColor Cyan
