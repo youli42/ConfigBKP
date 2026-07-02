@@ -36,12 +36,13 @@ try {
         Remove-Item -Path $ConfigDest -Recurse -Force
     }
     Copy-Item -Path (Join-Path $ProjectRoot "config") -Destination $OutDir -Recurse
-    # 复制 lang/ 到 exe 同目录，实现多语言
-    $LangDest = Join-Path $OutDir "lang"
+    # 复制 lang/ 到 _internal/ 目录
+    $LangDest = Join-Path $OutDir "_internal" "lang"
     if (Test-Path $LangDest) {
         Remove-Item -Path $LangDest -Recurse -Force
     }
-    Copy-Item -Path (Join-Path $ProjectRoot "lang") -Destination $OutDir -Recurse
+    New-Item -ItemType Directory -Path (Join-Path $OutDir "_internal") -Force | Out-Null
+    Copy-Item -Path (Join-Path $ProjectRoot "lang") -Destination (Join-Path $OutDir "_internal") -Recurse
     Write-Host "打包成功! 输出: $OutDir" -ForegroundColor Green
     Write-Host "目录结构:" -ForegroundColor Cyan
     Get-ChildItem -Path $OutDir -Name

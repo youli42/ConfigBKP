@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -7,6 +8,12 @@ from PySide6.QtCore import QTranslator, QCoreApplication
 _current_locale = "zh_CN"
 _callbacks: list[Callable[[], None]] = []
 _translator: QTranslator | None = None
+
+
+def _get_lang_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "_internal" / "lang"
+    return Path(__file__).resolve().parent.parent.parent / "lang"
 
 
 def install(locale: str):
@@ -29,7 +36,7 @@ def install(locale: str):
         return
 
     # Load .qm file for the target locale
-    qm_path = Path(__file__).resolve().parent.parent.parent / "lang" / f"{locale}.qm"
+    qm_path = _get_lang_dir() / f"{locale}.qm"
     if qm_path.exists():
         new_translator = QTranslator()
         if new_translator.load(str(qm_path)):
